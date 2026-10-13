@@ -17,3 +17,4 @@
 
 | 日期 | 文件 | 改动 | 原因 |
 |---|---|---|---|
+| 2026-10-13 | h_jepa/data.py | `build_hdf5_dataset` 增加 `type: evowm_transect` 分支，返回 `evowm.data.transect.TreeTransectDataset`；原 droid 分支改为先取出 type 再判断，行为不变 | 接入系统发育样带数据，写法仿上游的 DROID 分支 |

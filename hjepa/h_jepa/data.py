@@ -39,10 +39,15 @@ def build_hdf5_dataset(dataset_cfg, cache_dir=None):
     else:
         cfg = dict(dataset_cfg)
     cfg.pop("val_name", None)
-    if cfg.pop("type", None) == "droid":
+    dataset_type = cfg.pop("type", None)
+    if dataset_type == "droid":
         from droid_data import DROIDDataset
 
         return DROIDDataset(**cfg)
+    if dataset_type == "evowm_transect":  # EvoWM: phylogenetic transects (../src/evowm)
+        from evowm.data.transect import TreeTransectDataset
+
+        return TreeTransectDataset(**cfg)
     subset_seed = int(cfg.pop("subset_seed", 0))
     total_transitions = cfg.pop("total_transitions", None)
     dataset = swm.data.HDF5Dataset(**cfg, cache_dir=cache_dir)
