@@ -23,10 +23,11 @@ EvoWM/
 │  ├─ prior_results/   FFY 生物侧旧结果，只读，作基线与模拟先验
 │  ├─ interim/         中间表，由 scripts/ 生成
 │  └─ processed/       建模用表，由 scripts/ 生成
+├─ hjepa/              H-JEPA 源码（上游 97054ec，MIT），模型在此基础上改；见 hjepa/UPSTREAM.md
 ├─ src/evowm/
-│  ├─ data/            物种主表、近缘对采样、树工具
+│  ├─ data/            物种主表、系统发育样带数据集、树工具
 │  ├─ sim/             树上 OU 模拟（恢复检验）
-│  ├─ models/          编码器、预测器、SIGReg、逆动力学头、分级
+│  ├─ models/          对 hjepa 的鸟类专用扩展（尽量少）
 │  └─ eval/            探针、类群留出、观测空间指标
 ├─ configs/
 ├─ scripts/            可执行入口；exploratory/ 只放选方向用的探索
@@ -52,5 +53,5 @@ EvoWM/
 
 ## 参考
 
-- H-JEPA：https://github.com/kevinghst/H-JEPA（MIT），借用分级堆叠、SIGReg、逆动力学头。
+- H-JEPA：已原样导入 `hjepa/`（https://github.com/kevinghst/H-JEPA ，提交 97054ec，MIT），在其源码上改；改动逐条登记在 `hjepa/UPSTREAM.md`。
 - 旧 PGLS 与 R 脚本：`Desktop\FFY\FFY\src\stage6_surrogate\`。
