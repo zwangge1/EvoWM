@@ -4,7 +4,7 @@ dependencies:
   - python=3.11
   - pip
   - pip:
-      - --extra-index-url https://download.pytorch.org/whl/cu126
+      # PyPI 上的 torch 2.7.1（Linux）默认就是 CUDA 12.6 版本，不需要额外的 PyTorch 源；国内可用镜像加速
       - torch==2.7.1
       - torchvision==0.22.1
       # 以下对应 hjepa/pyproject.toml 的 dependencies 与 train 两组（去掉视频与机器人环境）
