@@ -2,14 +2,34 @@ name: evowm
 channels: [conda-forge]
 dependencies:
   - python=3.11
-  - numpy
-  - pandas
-  - scipy
-  - scikit-learn
-  - matplotlib
-  - openpyxl
   - pip
   - pip:
-      - --extra-index-url https://download.pytorch.org/whl/cu121
-      - torch
-      - treeswift
+      - --extra-index-url https://download.pytorch.org/whl/cu126
+      - torch==2.7.1
+      - torchvision==0.22.1
+      # 以下对应 hjepa/pyproject.toml 的 dependencies 与 train 两组（去掉视频与机器人环境）
+      - numpy
+      - scipy
+      - pandas
+      - openpyxl
+      - einops
+      - loguru
+      - tabulate
+      - tqdm
+      - typer
+      - rich
+      - h5py
+      - hdf5plugin
+      - gdown
+      - gymnasium==1.2.3
+      - transformers>=4.50.0
+      - stable-pretraining==0.1.7
+      - datasets>=4
+      - lightning>=2.5
+      - torchmetrics
+      - hydra-core
+      - hydra-submitit-launcher
+      - wandb
+      - scikit-learn
+      - matplotlib
+      - psutil

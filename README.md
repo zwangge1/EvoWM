@@ -29,10 +29,21 @@ EvoWM/
 │  ├─ sim/             树上 OU 模拟（恢复检验）
 │  ├─ models/          对 hjepa 的鸟类专用扩展（尽量少）
 │  └─ eval/            探针、类群留出、观测空间指标
-├─ configs/
+├─ configs/hjepa/      H-JEPA 训练配置（hydra，用 --config-dir 加载，不改上游配置）
 ├─ scripts/            可执行入口；exploratory/ 只放选方向用的探索
 └─ outputs/            每次运行一个子目录
 ```
+
+## 运行
+
+在 EvoWM 根目录：
+
+1. 生成物种主表：`python scripts/build_species_table.py`，写到 `data/processed/species_traits.csv`。
+2. 生成冒烟测试用的模拟表：`python scripts/sim_smoke_table.py`，不含任何真实形态数值。
+3. 训练：`bash scripts/train_hjepa.sh evowm_l2 [hydra 覆盖项]`，配置在 `configs/hjepa/`，结果写到 `outputs/hjepa/ckpts/`。
+   CPU 冒烟测试：`bash scripts/train_hjepa.sh evowm_l2 data.dataset.species_table=data/processed/sim/smoke/species_traits.csv data.dataset.n_trees=10 trainer.accelerator=cpu trainer.precision=32 trainer.max_epochs=1 +trainer.limit_train_batches=40 num_workers=2`
+
+环境：`conda env create -f environment.yml`（Python 3.11、torch 2.7.1，与上游一致）。
 
 ## 数据注意
 

@@ -1,0 +1,108 @@
+# @package _global_
+# EvoWM：系统发育样带接 H-JEPA，各层共用设置。
+# 数据路径相对环境变量 EVOWM_ROOT（EvoWM 根目录）；输出写到 HJEPA_HOME/ckpts/。
+data:
+  dataset:
+    type: evowm_transect
+    name: evowm_train
+    val_name: evowm_val
+    evowm_root: ${oc.env:EVOWM_ROOT}
+    species_table: data/processed/species_traits.csv
+    tree_file: data/raw/birdtree/hackett_100.nwk
+    n_trees: 100
+    holdout:
+      level: family
+      frac: 0.15
+      seed: 0
+    n_orders: 64
+    refresh_every: 256
+    keys_to_load:
+    - pixels
+    level1:
+      frameskip: 1
+      num_steps: ${eval:'${level1.wm.history_size} + ${level1.wm.rollout_n}'}
+output_model_name: model
+env: evowm
+subdir: ${env}/${output_model_name}/seed${seed}
+hydra:
+  run:
+    dir: ${oc.env:HJEPA_HOME}/ckpts/${subdir}/hydra
+quick_debug: false
+num_workers: 4
+seed: 42
+img_size: 1      # 上游接口要求的字段，MLP 编码器不用
+patch_size: 1
+dump_object: true
+save_every_n_epochs: 1
+resume_every_n_steps: 0
+trainer:
+  max_epochs: 20
+  devices: auto
+  accelerator: gpu
+  precision: bf16
+  gradient_clip_val: 1.0
+  num_sanity_val_steps: 1
+loader:
+  batch_size: 256
+  num_workers: ${num_workers}
+  drop_last: true
+  persistent_workers: true
+  prefetch_factor: 2
+  pin_memory: true
+  shuffle: true
+optimizer:
+  type: AdamW
+  lr: 3.0e-04
+  weight_decay: 0.001
+wandb:
+  enabled: false
+  config:
+    entity: null
+    project: evowm
+    name: null
+    id: null
+    resume: allow
+    log_model: false
+planning_eval:
+  enabled: false
+  config_name: none
+  output_subdir: planning_eval
+  run_on_train_end: false
+  every_n_epochs: 0
+final_probing_decoding_eval:
+  enabled: false
+  config_name: none
+  output_subdir: final_probing_decoding_eval
+level1:
+  lr: 3.0e-04
+  wm:
+    history_size: 3
+    rollout_n: 1
+    rollout_loss_weight: 1.0
+    embed_dim: 128
+    use_proprio: false
+    action_dim: 99      # = 2 × 习性列数 + 习性组数 + 2（距离），数据集会打印核对
+  encoder:
+    type: mlp
+    input_dim: 46       # = 2 × 形态列数（值 + 缺失掩码）
+    hidden_dim: 256
+    output_dim: 128
+    projector:
+      type: identity
+  action_embed:
+    patch_embed: false
+  predictor:
+    depth: 3
+    heads: 4
+    mlp_dim: 512
+    dim_head: 32
+    dropout: 0.1
+    emb_dropout: 0.0
+    hidden_dim: 128
+    projector:
+      type: mlp
+  loss:
+    embed:
+      sigreg:
+        enabled: true
+        weight: 0.09

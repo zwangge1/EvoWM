@@ -1,0 +1,6 @@
+# EvoWM：只有第 1 层（相邻物种之间的转变）。
+defaults:
+- base/evowm
+- _self_
+output_model_name: evowm_l1
+num_levels: 1

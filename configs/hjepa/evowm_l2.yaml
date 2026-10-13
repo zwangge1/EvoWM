@@ -1,0 +1,53 @@
+# EvoWM：两层。第 2 层每隔 stride 个物种取一个，对应更远的亲缘、更长的演化时间。
+defaults:
+- base/evowm
+- _self_
+output_model_name: evowm_l2
+num_levels: 2
+data:
+  dataset:
+    level2:
+      frameskip: ${level2.stride}
+      window_size: ${level2.window_size}
+      num_steps: ${eval:'${level2.wm.history_size} + ${level2.wm.rollout_n}'}
+level2:
+  lr: 1.0e-04
+  stride: 3
+  window_size: 1
+  wm:
+    history_size: 3
+    rollout_n: 1
+    rollout_loss_weight: 1.0
+    embed_dim: 128
+    use_proprio: false
+  encoder:
+    type: latent_mlp
+    input_dim: ${level1.wm.embed_dim}
+    hidden_dim: 256
+    final_ln: false
+    output_dim: ${level2.wm.embed_dim}
+    projector:
+      type: identity
+  action_encoder:
+    output_dim: 16
+    input_dim: ${level1.wm.embed_dim}
+    max_chunk: ${eval:'${data.dataset.level2.frameskip} + 1'}
+    queue_size: 0
+  action_embed:
+    patch_embed: false
+    input_dim: ${level2.action_encoder.output_dim}
+  predictor:
+    depth: 3
+    heads: 4
+    mlp_dim: 512
+    dim_head: 32
+    dropout: 0.1
+    emb_dropout: 0.0
+    hidden_dim: 128
+    projector:
+      type: mlp
+  loss:
+    embed:
+      sigreg:
+        enabled: true
+        weight: 0.09
