@@ -63,6 +63,24 @@ def holdout_families(table: pd.DataFrame, eligible: np.ndarray, frac: float, see
     return set(chosen)
 
 
+def family_folds(table: pd.DataFrame, eligible: np.ndarray, n_folds: int, seed: int,
+                 level: str = "family") -> dict[str, int]:
+    """把整科分成 n_folds 份做交叉验证，每科恰好属于一份，各份物种数尽量相等。
+
+    科先随机打乱（seed），再按物种数从大到小（同样大小保持随机顺序）依次放进当前物种最少的一份。
+    """
+    groups = table.loc[eligible, level].value_counts()
+    order = np.random.default_rng(seed).permutation(groups.index.to_numpy())
+    order = sorted(order, key=lambda g: -groups[g])
+    load = np.zeros(n_folds)
+    fold_of = {}
+    for g in order:
+        k = int(np.argmin(load))
+        fold_of[g] = k
+        load[k] += groups[g]
+    return fold_of
+
+
 class TreeTransectDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -107,8 +125,15 @@ class TreeTransectDataset(torch.utils.data.Dataset):
         # ---- 可用物种与留出 ----
         eligible = table[list(require_cols)].notna().all(axis=1).to_numpy()
         holdout = dict(holdout or {})
-        held = holdout_families(table, eligible, float(holdout.get("frac", 0.0)), int(holdout.get("seed", 0)),
-                                holdout.get("level", "family"), holdout.get("stratify")) if holdout.get("frac", 0) else set()
+        if holdout.get("folds"):  # 按科 K 折交叉验证：留出第 fold 份
+            fold_of = family_folds(table, eligible, int(holdout["folds"]), int(holdout.get("seed", 0)),
+                                   holdout.get("level", "family"))
+            held = {g for g, k in fold_of.items() if k == int(holdout.get("fold", 0))}
+        elif holdout.get("frac", 0):
+            held = holdout_families(table, eligible, float(holdout["frac"]), int(holdout.get("seed", 0)),
+                                    holdout.get("level", "family"), holdout.get("stratify"))
+        else:
+            held = set()
         in_val = table[holdout.get("level", "family")].isin(held).to_numpy()
         train_rows = eligible & ~in_val
         self.rows_mask = (eligible & in_val) if self.split == "val" else train_rows

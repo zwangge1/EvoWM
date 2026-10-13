@@ -1,0 +1,17 @@
+# 模拟恢复检验 v3：训练设置同 v2（单层，4,000 步，批量 128），留出方式改为按科 5 折交叉验证。
+# 每折训练一个模型，折号用 data.dataset.holdout.fold=0..4 指定。
+# 单卡、fp32：与 v2 的训练一致（多卡时总批量变大，SIGReg 按总批量计算，等于改了正则强度）。
+defaults:
+- recovery_v2_l1
+- _self_
+data:
+  dataset:
+    holdout:
+      level: family
+      frac: 0
+      folds: 5
+      fold: 0
+      seed: 0
+trainer:
+  devices: 1
+  precision: 32
