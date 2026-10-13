@@ -36,17 +36,30 @@ def required_level1_steps(level_cfgs: list[dict]) -> int:
     return max(need(i) for i in range(1, len(level_cfgs) + 1))
 
 
-def holdout_families(table: pd.DataFrame, eligible: np.ndarray, frac: float, seed: int, level: str = "family") -> set[str]:
-    """随机抽整科（或整目）留出，直到留出物种数达到 frac。"""
-    groups = table.loc[eligible, level].value_counts()
+def holdout_families(table: pd.DataFrame, eligible: np.ndarray, frac: float, seed: int, level: str = "family",
+                     stratify: str | None = None) -> set[str]:
+    """随机抽整科（或整目）留出，直到留出物种数达到 frac。
+
+    stratify="passerine" 时在雀形目与非雀形目内各自按 frac 抽，保证有骨段数据的雀形目在留出集里有足够的科。
+    """
+    if stratify == "passerine":
+        strata = [(table["order"] == "Passeriformes").to_numpy(), (table["order"] != "Passeriformes").to_numpy()]
+    elif stratify is None:
+        strata = [np.ones(len(table), bool)]
+    else:
+        raise ValueError(f"未知的分层方式：{stratify}")
     rng = np.random.default_rng(seed)
-    order = rng.permutation(groups.index.to_numpy())
-    target, total, chosen = frac * eligible.sum(), 0, []
-    for g in order:
-        if total >= target:
-            break
-        chosen.append(g)
-        total += groups[g]
+    chosen = []
+    for st in strata:
+        el = eligible & st
+        groups = table.loc[el, level].value_counts()
+        order = rng.permutation(groups.index.to_numpy())
+        target, total = frac * el.sum(), 0
+        for g in order:
+            if total >= target:
+                break
+            chosen.append(g)
+            total += groups[g]
     return set(chosen)
 
 
@@ -67,6 +80,7 @@ class TreeTransectDataset(torch.utils.data.Dataset):
         n_orders: int = 64,
         refresh_every: int = 256,
         samples_per_epoch: int | None = None,
+        eco_dropout: float = 0.0,
         seed: int = 0,
         keys_to_load=None,
         keys_to_cache=None,
@@ -94,7 +108,7 @@ class TreeTransectDataset(torch.utils.data.Dataset):
         eligible = table[list(require_cols)].notna().all(axis=1).to_numpy()
         holdout = dict(holdout or {})
         held = holdout_families(table, eligible, float(holdout.get("frac", 0.0)), int(holdout.get("seed", 0)),
-                                holdout.get("level", "family")) if holdout.get("frac", 0) else set()
+                                holdout.get("level", "family"), holdout.get("stratify")) if holdout.get("frac", 0) else set()
         in_val = table[holdout.get("level", "family")].isin(held).to_numpy()
         train_rows = eligible & ~in_val
         self.rows_mask = (eligible & in_val) if self.split == "val" else train_rows
@@ -129,6 +143,7 @@ class TreeTransectDataset(torch.utils.data.Dataset):
         self.row_of_tip = [np.array([row_index[n] for n in tr.tip_names]) for tr in self.trees]
 
         self.seed = int(seed)
+        self.eco_dropout = float(eco_dropout)   # 训练时整条样带的习性部分置零的概率（只留进化距离）
         self.n_orders = int(n_orders)
         self.refresh_every = int(refresh_every)
         init_rng = np.random.default_rng(self.seed + (0 if self.split == "train" else 10_000))
@@ -169,27 +184,43 @@ class TreeTransectDataset(torch.utils.data.Dataset):
         start = int(rng.integers(0, len(rows_all) - L + 1))
         rows = rows_all[start:start + L]
         d = dist_all[start:start + L - 1]
-
-        cmask = self.Eg[rows][:, self.col_group]            # (L, E) 每列是否有数据
-        E = self.E0[rows] * cmask
-        both = cmask[1:] * cmask[:-1]
-        action = np.concatenate([
-            (E[1:] - E[:-1]) * both,                         # 习性差
-            E[1:],                                           # 下一种的习性
-            self.Eg[rows[1:]],                               # 下一种各习性组是否有数据
-            np.log1p(d)[:, None] / np.log1p(D_MAX),          # 进化距离（对数）
-            d[:, None] / D_MAX,                              # 进化距离（线性）
-        ], axis=1)
-        action = np.concatenate([action, np.zeros((1, action.shape[1]), np.float32)], axis=0)
+        eco = not (self.split == "train" and self.eco_dropout > 0 and rng.random() < self.eco_dropout)
+        action = self.build_action(rows, d, eco=eco)
 
         steps = {
             "pixels": torch.from_numpy(self.pix[rows]),
-            "action": torch.from_numpy(action.astype(np.float32)),
+            "action": torch.from_numpy(action),
             "state": torch.from_numpy(self.S[rows]),
         }
         if self.transform:
             steps = self.transform(steps)
         return {f"{k}_level1": v for k, v in steps.items()}
+
+    def eco_rows(self, rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """物种的习性向量（缺失列置 0）与习性组掩码。"""
+        cmask = self.Eg[rows][:, self.col_group]
+        return self.E0[rows] * cmask, self.Eg[rows]
+
+    def build_action(self, rows: np.ndarray, d: np.ndarray, eco: bool = True,
+                     E: np.ndarray | None = None, Eg: np.ndarray | None = None) -> np.ndarray:
+        """一条样带的动作序列 (L, action_dim)。E、Eg 可传入替换值（反事实评估用）。"""
+        if E is None or Eg is None:
+            E, Eg = self.eco_rows(rows)
+        cmask = Eg[:, self.col_group]
+        both = cmask[1:] * cmask[:-1]
+        parts = [
+            (E[1:] - E[:-1]) * both,                         # 习性差
+            E[1:],                                           # 下一种的习性
+            Eg[1:],                                          # 下一种各习性组是否有数据
+        ]
+        if not eco:
+            parts = [np.zeros_like(p) for p in parts]
+        action = np.concatenate(parts + [
+            np.log1p(d)[:, None] / np.log1p(D_MAX),          # 进化距离（对数）
+            d[:, None] / D_MAX,                              # 进化距离（线性）
+        ], axis=1)
+        action = np.concatenate([action, np.zeros((1, action.shape[1]))], axis=0)
+        return action.astype(np.float32)
 
     # 上游 get_column_normalizer / build_normalizer_artifact 的接口；本数据集已自行归一化
     def get_col_stats(self, col: str):

@@ -1,0 +1,16 @@
+# 模拟恢复检验 v2：单层模型，训练 4,000 步（批量 128，每 epoch 500 步，8 个 epoch）。
+# 预注册见 docs/prereg/sim_recovery_v2.md。模拟表与树在命令行指定。
+defaults:
+- evowm_l1
+- _self_
+output_model_name: evowm_l1
+data:
+  dataset:
+    eco_dropout: 0.5
+    samples_per_epoch: 64000
+loader:
+  batch_size: 128
+trainer:
+  max_epochs: 8
+  limit_val_batches: 50
+save_every_n_epochs: 8
