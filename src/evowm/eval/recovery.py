@@ -116,8 +116,30 @@ def family_bootstrap_rmse_diff(err_a, err_b, fam, n_boot=1000, seed=0):
     return float(point), float(lo), float(hi), int(ok.sum()), len(fams)
 
 
+def oracle_errors(table: pd.DataFrame, truth: dict, train_rows: np.ndarray, W: Windows, H: int,
+                  c: str, y_true: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """理想预测器在全部相邻对上的误差（展平）：已知 α、体制最优值、异速斜率，只用前一种，
+    不知道目标种的体重（按前一种体重代入）。返回（知道目标种体制，不知道目标种体制）两组误差。"""
+    reg_all = table["sim_regime"].to_numpy()
+    prev_rows, tgt_rows = W.rows[:, :H], W.rows[:, 1:H + 1]
+    alpha = float(truth["alpha"])
+    slope = float(truth.get("allometric_slope", 0.33))
+    mass = table["m_mass"].to_numpy()
+    k = np.exp(-alpha * W.dist[:, :H]).reshape(-1)
+    off = truth["leg_offsets"][truth["leg_source"][c]]
+    th = np.array([off.get(r, 0.0) if isinstance(r, str) else 0.0 for r in reg_all])
+    tbar = float(np.mean(th[train_rows]))
+    xA = table[c].to_numpy()[prev_rows].reshape(-1)
+    base = 1.0 + slope * mass[prev_rows].reshape(-1)
+    rA = xA - base
+    thA, thB = th[prev_rows].reshape(-1), th[tgt_rows].reshape(-1)
+    yB = y_true.reshape(-1)
+    return base + thB + k * (rA - thA) - yB, base + tbar + k * (rA - tbar) - yB
+
+
 def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict,
-                 n_orders: int = 8, seed: int = 0) -> dict:
+                 n_orders: int = 8, seed: int = 0, raw: dict | None = None) -> dict:
+    """raw 不为 None 时，把逐预测的误差、科、距离与敏感度存进去，供多折合并（v3 交叉验证）。"""
     L1 = Level1(model)
     H = int(L1.jepa.predictor.predictor.pos_embedding.shape[1]) if hasattr(L1.jepa.predictor, "predictor") else 3
     state_cols = ds_train.state_cols
@@ -157,33 +179,22 @@ def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict,
     reg_all = table["sim_regime"].to_numpy()
     prev_rows = W.rows[:, :H]
     trans = (reg_all[prev_rows] != reg_all[tgt_rows]).reshape(-1)
-    alpha = float(truth["alpha"])
-    slope = float(truth.get("allometric_slope", 0.33))
-    mass = table["m_mass"].to_numpy()
-    k = np.exp(-alpha * W.dist[:, :H]).reshape(-1)
+    tr_rows = np.flatnonzero(ds_train.rows_mask)
     e1t = {"share_transition_pairs": float(trans.mean())}
     for c, j in leg_idx.items():
         ea = (pred_eco[..., j] - true[..., j]).reshape(-1)
         en = (pred_no[..., j] - true[..., j]).reshape(-1)
         ea_t, en_t = np.where(trans, ea, np.nan), np.where(trans, en, np.nan)
         point, lo, hi, n, nf = family_bootstrap_rmse_diff(ea_t, en_t, fam, seed=seed)
-        # 理想预测：已知 α、体制最优值、异速斜率，只用前一种（不知道目标种的体重，按前一种体重代入）
-        off = truth["leg_offsets"][truth["leg_source"][c]]
-        th = np.array([off.get(r, 0.0) if isinstance(r, str) else 0.0 for r in reg_all])
-        tr_rows = np.flatnonzero(ds_train.rows_mask)
-        tbar = float(np.mean(th[tr_rows]))
-        xA = table[c].to_numpy()[prev_rows].reshape(-1)
-        base = 1.0 + slope * mass[prev_rows].reshape(-1)
-        rA = xA - base
-        thA, thB = th[prev_rows].reshape(-1), th[tgt_rows].reshape(-1)
-        yB = true[..., j].reshape(-1)
-        o_w = base + thB + k * (rA - thA) - yB
-        o_o = base + tbar + k * (rA - tbar) - yB
+        o_w, o_o = oracle_errors(table, truth, tr_rows, W, H, c, true[..., j])
         o_w_t, o_o_t = np.where(trans, o_w, np.nan), np.where(trans, o_o, np.nan)
         opt, olo, ohi, _, _ = family_bootstrap_rmse_diff(o_w_t, o_o_t, fam, seed=seed)
         e1t[c] = {"gain": point, "ci95": [lo, hi], "n_pred": n, "n_families": nf,
                   "oracle_gain": opt, "oracle_ci95": [olo, ohi],
                   "ratio_to_oracle": float(point / opt) if opt > 0 else float("nan")}
+        if raw is not None:
+            raw.setdefault("E1", {})[c] = {"err_eco": ea, "err_no_eco": en, "oracle_eco": o_w, "oracle_no_eco": o_o,
+                                           "transition": trans, "family": fam}
     res["E1_transition"] = e1t
 
     # ---- E2：反事实体制对比（只用每个窗口的第 1 个预测）----
@@ -265,12 +276,19 @@ def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict,
     moved = apply_probe(probes, L1.predict(L1.encode(pix0_p)[:, None], act0))[:, 0, j_t]
     s = (moved - base) / DELTA
     d0 = W.dist[:, 0]
+    res["E3"] = fit_half_life(d0, s)
+    if raw is not None:
+        raw["E3"] = {"distance": d0, "sensitivity": s}
+    return res
+
+
+def fit_half_life(d0: np.ndarray, s: np.ndarray) -> dict:
+    """敏感度按距离分 20 个分位箱取中位数，拟合 exp(−αd) 与 c·exp(−αd)，返回 t½ = ln2/α。"""
     bins = np.quantile(d0, np.linspace(0, 1, 21))
     which = np.clip(np.digitize(d0, bins[1:-1]), 0, 19)
     bd = np.array([np.median(d0[which == b]) for b in range(20)])
     bs = np.array([np.median(s[which == b]) for b in range(20)])
     (a1,), _ = curve_fit(lambda x, a: np.exp(-a * x), bd, bs, p0=[0.05], bounds=(1e-5, 10))
     (c2, a2), _ = curve_fit(lambda x, c, a: c * np.exp(-a * x), bd, bs, p0=[1.0, 0.05], bounds=([0, 1e-5], [10, 10]))
-    res["E3"] = {"t_half": float(np.log(2) / a1), "t_half_free_amplitude": float(np.log(2) / a2),
-                 "amplitude": float(c2), "binned_distance": bd.round(3).tolist(), "binned_slope": bs.round(4).tolist()}
-    return res
+    return {"t_half": float(np.log(2) / a1), "t_half_free_amplitude": float(np.log(2) / a2),
+            "amplitude": float(c2), "binned_distance": bd.round(3).tolist(), "binned_slope": bs.round(4).tolist()}
