@@ -174,6 +174,10 @@ def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict,
                  "gain": point, "ci95": [lo, hi], "n_pred": n, "n_families": nf}
     res["E1"] = e1
     res["n_windows"] = int(len(W.rows))
+    if raw is not None:  # 全部状态列的逐预测误差（v4 用于相对跗跖：跗跖误差 − b × 体重误差）
+        raw["E1_state"] = {"err_eco": (pred_eco - true).reshape(-1, len(state_cols)),
+                           "err_no_eco": (pred_no - true).reshape(-1, len(state_cols)),
+                           "state_cols": list(state_cols)}
 
     # ---- E1 补充：只看体制转变的相邻对（前一种与目标种体制不同），并与"已知真值"的理想预测比较 ----
     reg_all = table["sim_regime"].to_numpy()
