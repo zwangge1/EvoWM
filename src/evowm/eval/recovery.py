@@ -137,9 +137,13 @@ def oracle_errors(table: pd.DataFrame, truth: dict, train_rows: np.ndarray, W: W
     return base + thB + k * (rA - thA) - yB, base + tbar + k * (rA - tbar) - yB
 
 
-def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict,
-                 n_orders: int = 8, seed: int = 0, raw: dict | None = None) -> dict:
-    """raw 不为 None 时，把逐预测的误差、科、距离与敏感度存进去，供多折合并（v3 交叉验证）。"""
+def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict | None,
+                 n_orders: int = 8, seed: int = 0, raw: dict | None = None,
+                 regimes: list[str] | None = None) -> dict:
+    """raw 不为 None 时，把逐预测的误差、科、距离与敏感度存进去，供多折合并（v3 交叉验证）。
+
+    truth 为 None 时用于真实数据：不算理想预测器与真值比较，体制列表由 regimes 给出；
+    table 需有 sim_regime 列（真实数据里放运动方式类别）。"""
     L1 = Level1(model)
     H = int(L1.jepa.predictor.predictor.pos_embedding.shape[1]) if hasattr(L1.jepa.predictor, "predictor") else 3
     state_cols = ds_train.state_cols
@@ -178,6 +182,7 @@ def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict,
         raw["E1_state"] = {"err_eco": (pred_eco - true).reshape(-1, len(state_cols)),
                            "err_no_eco": (pred_no - true).reshape(-1, len(state_cols)),
                            "state_cols": list(state_cols)}
+        raw["windows"] = {"rows": W.rows, "dist": W.dist, "H": H}
 
     # ---- E1 补充：只看体制转变的相邻对（前一种与目标种体制不同），并与"已知真值"的理想预测比较 ----
     reg_all = table["sim_regime"].to_numpy()
@@ -190,9 +195,13 @@ def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict,
         en = (pred_no[..., j] - true[..., j]).reshape(-1)
         ea_t, en_t = np.where(trans, ea, np.nan), np.where(trans, en, np.nan)
         point, lo, hi, n, nf = family_bootstrap_rmse_diff(ea_t, en_t, fam, seed=seed)
-        o_w, o_o = oracle_errors(table, truth, tr_rows, W, H, c, true[..., j])
-        o_w_t, o_o_t = np.where(trans, o_w, np.nan), np.where(trans, o_o, np.nan)
-        opt, olo, ohi, _, _ = family_bootstrap_rmse_diff(o_w_t, o_o_t, fam, seed=seed)
+        if truth is not None:
+            o_w, o_o = oracle_errors(table, truth, tr_rows, W, H, c, true[..., j])
+            o_w_t, o_o_t = np.where(trans, o_w, np.nan), np.where(trans, o_o, np.nan)
+            opt, olo, ohi, _, _ = family_bootstrap_rmse_diff(o_w_t, o_o_t, fam, seed=seed)
+        else:
+            o_w = o_o = np.full_like(ea, np.nan)
+            opt = olo = ohi = float("nan")
         e1t[c] = {"gain": point, "ci95": [lo, hi], "n_pred": n, "n_families": nf,
                   "oracle_gain": opt, "oracle_ci95": [olo, ohi],
                   "ratio_to_oracle": float(point / opt) if opt > 0 else float("nan")}
@@ -202,7 +211,7 @@ def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict,
     res["E1_transition"] = e1t
 
     # ---- E2：反事实体制对比（只用每个窗口的第 1 个预测）----
-    regimes = truth["regimes"]
+    regimes = list(truth["regimes"]) if truth is not None else list(regimes)
     reg = table["sim_regime"].to_numpy()
     E_all, Eg_all = ds_train.eco_rows(np.arange(len(table)))
     full_groups = Eg_all.min(axis=1) > 0
@@ -223,11 +232,14 @@ def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict,
         leg_pred[r] = apply_probe(probes, L1.predict(emb0, acts[:, :1]))[:, 0, :]
     contrasts = {r: {c: float(np.mean(leg_pred[r][:, j] - leg_pred[BASE_REGIME][:, j])) for c, j in leg_idx.items()}
                  for r in regimes if r != BASE_REGIME}
-    src = truth["leg_source"]
-    off = truth["leg_offsets"]
-    pairs = [(contrasts[r][c], off[src[c]][r] - off[src[c]][BASE_REGIME]) for r in contrasts for c in leg_idx]
-    pv, tv = np.array(pairs).T
-    rho = spearmanr(pv, tv).statistic if np.ptp(tv) > 0 else float("nan")
+    pv = np.array([contrasts[r][c] for r in contrasts for c in leg_idx])
+    if truth is not None:
+        src = truth["leg_source"]
+        off = truth["leg_offsets"]
+        tv = np.array([off[src[c]][r] - off[src[c]][BASE_REGIME] for r in contrasts for c in leg_idx])
+        rho = spearmanr(pv, tv).statistic if np.ptp(tv) > 0 else float("nan")
+    else:
+        rho = float("nan")
     res["E2"] = {"contrasts": contrasts, "spearman_rho": float(rho),
                  "median_abs_contrast": float(np.median(np.abs(pv)))}
 
@@ -244,9 +256,17 @@ def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict,
         dm = leg_pred[r][:, j_m] - leg_pred[BASE_REGIME][:, j_m]
         rel_contrasts[r] = {c: float(np.mean(leg_pred[r][:, j] - leg_pred[BASE_REGIME][:, j] - slopes[c] * dm))
                             for c, j in leg_idx.items()}
-    pairs_r = [(rel_contrasts[r][c], off[src[c]][r] - off[src[c]][BASE_REGIME]) for r in rel_contrasts for c in leg_idx]
-    pr, tr_ = np.array(pairs_r).T
-    rho_r = spearmanr(pr, tr_).statistic if np.ptp(tr_) > 0 else float("nan")
+    pr = np.array([rel_contrasts[r][c] for r in rel_contrasts for c in leg_idx])
+    if truth is not None:
+        tr_ = np.array([off[src[c]][r] - off[src[c]][BASE_REGIME] for r in rel_contrasts for c in leg_idx])
+        rho_r = spearmanr(pr, tr_).statistic if np.ptp(tr_) > 0 else float("nan")
+    else:
+        rho_r = float("nan")
+    if raw is not None:  # 逐窗口的相对对比（目标种为窗口第 2 种），供按科或按目自助重抽样
+        raw["E2_window"] = {"target_rows": W.rows[:, 1], "rel": {
+            r: {c: leg_pred[r][:, j] - leg_pred[BASE_REGIME][:, j]
+                - slopes[c] * (leg_pred[r][:, j_m] - leg_pred[BASE_REGIME][:, j_m]) for c, j in leg_idx.items()}
+            for r in regimes if r != BASE_REGIME}}
     # 可识别组合：训练物种中该体制与基准体制在该性状上都至少有 MIN_IDENT 种有观测
     ident = {}
     for c, j in leg_idx.items():
@@ -254,8 +274,11 @@ def evaluate_run(ds_train, ds_val, model, table: pd.DataFrame, truth: dict,
         n_base = int(np.sum(reg[obs] == BASE_REGIME))
         ident[c] = [r for r in regimes if r != BASE_REGIME and n_base >= MIN_IDENT and int(np.sum(reg[obs] == r)) >= MIN_IDENT]
     pv_i = np.array([rel_contrasts[r][c] for c in leg_idx for r in ident[c]])
-    tv_i = np.array([off[src[c]][r] - off[src[c]][BASE_REGIME] for c in leg_idx for r in ident[c]])
-    rho_i = spearmanr(pv_i, tv_i).statistic if len(tv_i) > 2 and np.ptp(tv_i) > 0 else float("nan")
+    if truth is not None:
+        tv_i = np.array([off[src[c]][r] - off[src[c]][BASE_REGIME] for c in leg_idx for r in ident[c]])
+        rho_i = spearmanr(pv_i, tv_i).statistic if len(tv_i) > 2 and np.ptp(tv_i) > 0 else float("nan")
+    else:
+        rho_i = float("nan")
     mt = np.array([rel_contrasts[r]["m_tarsus"] for r in ident.get("m_tarsus", [])])
     res["E2_relative"] = {"contrasts": rel_contrasts, "allometric_slopes": slopes, "spearman_rho": float(rho_r),
                           "median_abs_contrast": float(np.median(np.abs(pr))),
@@ -292,7 +315,14 @@ def fit_half_life(d0: np.ndarray, s: np.ndarray) -> dict:
     which = np.clip(np.digitize(d0, bins[1:-1]), 0, 19)
     bd = np.array([np.median(d0[which == b]) for b in range(20)])
     bs = np.array([np.median(s[which == b]) for b in range(20)])
-    (a1,), _ = curve_fit(lambda x, a: np.exp(-a * x), bd, bs, p0=[0.05], bounds=(1e-5, 10))
-    (c2, a2), _ = curve_fit(lambda x, c, a: c * np.exp(-a * x), bd, bs, p0=[1.0, 0.05], bounds=([0, 1e-5], [10, 10]))
+    try:  # 拟合不收敛时记为缺失（真实数据评估中不让单个折的失败中断全部评估）
+        (a1,), _ = curve_fit(lambda x, a: np.exp(-a * x), bd, bs, p0=[0.05], bounds=(1e-5, 10), max_nfev=10000)
+    except RuntimeError:
+        a1 = float("nan")
+    try:
+        (c2, a2), _ = curve_fit(lambda x, c, a: c * np.exp(-a * x), bd, bs, p0=[1.0, 0.05], bounds=([0, 1e-5], [10, 10]),
+                                max_nfev=10000)
+    except RuntimeError:
+        c2 = a2 = float("nan")
     return {"t_half": float(np.log(2) / a1), "t_half_free_amplitude": float(np.log(2) / a2),
             "amplitude": float(c2), "binned_distance": bd.round(3).tolist(), "binned_slope": bs.round(4).tolist()}

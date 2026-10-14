@@ -52,3 +52,18 @@ def simulate_bm_nodes(tree: Tree, rate: float, root_value: float, rng: np.random
     for v in range(1, n):
         x[v] = x[tree.parent[v]] + steps[v]
     return x
+
+
+def simulate_eb_nodes(tree: Tree, rate0: float, b: float, rng: np.random.Generator) -> np.ndarray:
+    """单性状"早期爆发"布朗运动（根处速率 rate0，速率随距根时间 t 按 e^{b t} 变化；b = 0 即普通布朗运动），根值 0。
+    返回所有节点的值 (n_nodes,)。一条从 t1 到 t2 的枝的方差为 rate0 (e^{b t2} − e^{b t1}) / b。"""
+    n = len(tree.parent)
+    var = np.zeros(n)
+    nonroot = tree.parent >= 0
+    t1, t2 = tree.depth[tree.parent[nonroot]], tree.depth[nonroot]
+    var[nonroot] = rate0 * ((np.exp(b * t2) - np.exp(b * t1)) / b if b != 0 else (t2 - t1))
+    steps = rng.normal(size=n) * np.sqrt(var)
+    x = np.zeros(n)
+    for v in range(1, n):
+        x[v] = x[tree.parent[v]] + steps[v]
+    return x

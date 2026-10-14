@@ -2,7 +2,10 @@
 
 所有形态列都换成模拟值，不含任何真实形态数值；习性列、科目、缺失位置沿用真实物种表。
 输出 data/processed/sim/recovery_<版本>/<情景>_s<种子>/ 下的 species_traits.csv、.columns.json、truth.json。
-在 EvoWM 根目录运行：python scripts/sim_recovery_tables.py [--version v2 --seeds 3 4]
+--bg-rate > 0 时（真实数据主分析 v1 的第 0 阶段，见 docs/prereg/real_main_v1.md 第 4 节），每个潜变量再加一个独立的
+"早期爆发"布朗背景（根处速率 --bg-rate，速率按 e^{b t} 随距根时间变化，b 为 --bg-eb），参数按真实数据相对跗跖残差的
+总方差与科内方差设定；默认 0，与 v1 到 v4 的表完全相同。
+在 EvoWM 根目录运行：python scripts/sim_recovery_tables.py [--version v2 --seeds 3 4] [--bg-rate 7.8e-4 --bg-eb -0.025]
 """
 import json
 import shutil
@@ -16,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from evowm.data.tree import read_trees  # noqa: E402
-from evowm.sim.ou import simulate_bm_nodes, simulate_ou_regimes  # noqa: E402
+from evowm.sim.ou import simulate_bm_nodes, simulate_eb_nodes, simulate_ou_regimes  # noqa: E402
 from evowm.sim.regimes import fitch, regime_locomotor  # noqa: E402
 
 REGIMES = ["insessorial", "terrestrial", "generalist", "aerial", "wading", "diving", "surface"]
@@ -40,7 +43,7 @@ LEG_OFFSETS = {
 LEG_SOURCE = {"m_tarsus": "L_tmt", "k_tarsometatarsus": "L_tmt", "k_tibiotarsus": "L_tib", "k_femur": "L_fem"}
 
 
-def build(table: pd.DataFrame, meta: dict, tree, scenario: str, seed: int):
+def build(table: pd.DataFrame, meta: dict, tree, scenario: str, seed: int, bg_rate: float = 0.0, bg_eb: float = 0.0):
     cols = meta["morph"] + meta["skeleton"]
     others = [c for c in cols if c not in LEG_SOURCE and c != "m_mass"]
     latents = list(LEG_OFFSETS) + others
@@ -63,6 +66,8 @@ def build(table: pd.DataFrame, meta: dict, tree, scenario: str, seed: int):
     rng = np.random.default_rng(seed)
     ou = simulate_ou_regimes(tree, node_regime, theta, ALPHA, np.full(len(latents), SD_STAT), rng)
     mass = simulate_bm_nodes(tree, MASS_RATE, MASS_ROOT, rng)
+    if bg_rate > 0:                                   # 布朗背景：每个潜变量独立，两个情景共用同一组随机数
+        ou = ou + np.column_stack([simulate_eb_nodes(tree, bg_rate, bg_eb, rng) for _ in latents])
     tips = tree.tip_nodes[order]                      # 按物种表行序
     lat = {name: ou[tips, j] for j, name in enumerate(latents)}
     logm = mass[tips]
@@ -89,7 +94,7 @@ def build(table: pd.DataFrame, meta: dict, tree, scenario: str, seed: int):
         "scenario": scenario, "seed": seed, "tree": "hackett_tree1", "regime_variable": "locomotor",
         "regimes": REGIMES, "regime_counts": lab.value_counts().to_dict(), "fitch_changes": int(changes),
         "t_half_myr": T_HALF, "alpha": ALPHA, "sd_stat": SD_STAT, "sd_measurement": SD_ME,
-        "mass_bm_rate": MASS_RATE, "allometric_slope": SLOPE,
+        "mass_bm_rate": MASS_RATE, "allometric_slope": SLOPE, "background_rate0": bg_rate, "background_eb": bg_eb,
         "leg_offsets": LEG_OFFSETS if scenario == "effect" else {k: {r: 0.0 for r in REGIMES} for k in LEG_OFFSETS},
         "leg_source": LEG_SOURCE,
     }
@@ -101,6 +106,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", default="v1", help="输出到 data/processed/sim/recovery_<version>/")
     ap.add_argument("--seeds", type=int, nargs="+", default=[1, 2])
+    ap.add_argument("--bg-rate", type=float, default=0.0, help="潜变量布朗背景在根处的速率（log10² / Myr）；0 表示不加")
+    ap.add_argument("--bg-eb", type=float, default=0.0, help="背景速率随距根时间的指数变化率 b（负值为早期爆发）")
     args = ap.parse_args()
     src = ROOT / "data/processed/species_traits.csv"
     meta = json.loads(src.with_suffix(".columns.json").read_text(encoding="utf-8"))
@@ -108,7 +115,7 @@ def main():
     tree = read_trees(ROOT / "data/raw/birdtree/hackett_tree1.nwk", max_trees=1)[0]
     for scenario in ("effect", "null"):
         for seed in args.seeds:
-            out, truth = build(table, meta, tree, scenario, seed)
+            out, truth = build(table, meta, tree, scenario, seed, args.bg_rate, args.bg_eb)
             dst = ROOT / f"data/processed/sim/recovery_{args.version}/{scenario}_s{seed}"
             dst.mkdir(parents=True, exist_ok=True)
             out.to_csv(dst / "species_traits.csv", index=False, float_format="%.6g")
