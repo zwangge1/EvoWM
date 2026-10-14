@@ -3,8 +3,10 @@
 一条样本 = 随机旋转的深度优先叶序里一段连续的物种（相邻的是近亲）。
 - 状态 pixels：该物种的形态向量（z 分数，缺失填 0）拼上缺失掩码。键名沿用上游的 pixels，
   这样 H-JEPA 模型代码不用改。
-- 动作 action[t]：从第 t 种到第 t+1 种的"习性转变"：习性差、下一种的习性、
-  下一种各习性组是否有数据、两种之间的进化距离。最后一步没有下一种，填 0。
+- 动作 action[t]：从第 t 种到第 t+1 种的"习性转变"。action_mode="full"（v1 到 v4、真实数据主分析 v1）：
+  习性差、下一种的习性、下一种各习性组是否有数据、两种之间的进化距离。action_mode="change"
+  （真实数据主分析 v2 起）：只有习性差、两种的各习性组是否都有数据、进化距离，不含下一种习性的绝对值，
+  模型只能把习性当作近亲之间的变化来用（原因见 docs/results/real_main_v1_stage0.md）。最后一步没有下一种，填 0。
 - 状态读数 state：原始观测值（log10 mm 等，缺失为 NaN），只供探针评估，训练不用。
 
 返回字典的键带 _level1 后缀，与上游 stable_worldmodel.data.HDF5Dataset 一致；
@@ -99,6 +101,7 @@ class TreeTransectDataset(torch.utils.data.Dataset):
         refresh_every: int = 256,
         samples_per_epoch: int | None = None,
         eco_dropout: float = 0.0,
+        action_mode: str = "full",
         seed: int = 0,
         keys_to_load=None,
         keys_to_cache=None,
@@ -179,7 +182,11 @@ class TreeTransectDataset(torch.utils.data.Dataset):
         self.lengths = np.array([n_rows])  # 上游归一化统计接口会读
         self.transform = None
         self.pixel_dim = self.pix.shape[1]
-        self.action_dim = 2 * len(eco_cols) + len(group_names) + 2
+        if action_mode not in ("full", "change"):
+            raise ValueError(f"action_mode 只能是 full 或 change，收到 {action_mode}")
+        self.action_mode = action_mode
+        n_eco = (2 if action_mode == "full" else 1) * len(eco_cols)
+        self.action_dim = n_eco + len(group_names) + 2
 
     # ------------------------------------------------------------------
     def _new_order(self, rng: np.random.Generator):
@@ -233,11 +240,17 @@ class TreeTransectDataset(torch.utils.data.Dataset):
             E, Eg = self.eco_rows(rows)
         cmask = Eg[:, self.col_group]
         both = cmask[1:] * cmask[:-1]
-        parts = [
-            (E[1:] - E[:-1]) * both,                         # 习性差
-            E[1:],                                           # 下一种的习性
-            Eg[1:],                                          # 下一种各习性组是否有数据
-        ]
+        if self.action_mode == "change":
+            parts = [
+                (E[1:] - E[:-1]) * both,                     # 习性差
+                Eg[1:] * Eg[:-1],                            # 两种的各习性组是否都有数据（区分"没变"与"没数据"）
+            ]
+        else:
+            parts = [
+                (E[1:] - E[:-1]) * both,                     # 习性差
+                E[1:],                                       # 下一种的习性
+                Eg[1:],                                      # 下一种各习性组是否有数据
+            ]
         if not eco:
             parts = [np.zeros_like(p) for p in parts]
         action = np.concatenate(parts + [
@@ -254,5 +267,5 @@ class TreeTransectDataset(torch.utils.data.Dataset):
 
     def describe(self) -> str:
         return (f"TreeTransectDataset[{self.split}] 物种 {int(self.rows_mask.sum())}，样带长度 {self.span}，"
-                f"pixels 维 {self.pixel_dim}，action 维 {self.action_dim}，树 {len(self.trees)} 棵，"
+                f"pixels 维 {self.pixel_dim}，action 维 {self.action_dim}（{self.action_mode}），树 {len(self.trees)} 棵，"
                 f"留出类群 {len(self.heldout_groups)} 个")

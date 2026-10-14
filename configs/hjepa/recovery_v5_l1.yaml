@@ -1,0 +1,11 @@
+# 动作只含习性变化（真实数据主分析 v2 起）：近亲之间的习性差、两种的各习性组是否都有数据、进化距离，
+# 不含目标种习性的绝对值（原因见 docs/results/real_main_v1_stage0.md）。其余与 recovery_v3_l1 相同。
+defaults:
+- recovery_v3_l1
+- _self_
+data:
+  dataset:
+    action_mode: change
+level1:
+  wm:
+    action_dim: 52   # = 习性列数 47 + 习性组数 3 + 2（距离），数据集会打印核对
