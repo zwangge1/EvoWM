@@ -2,7 +2,7 @@
 
 在 EvoWM 根目录运行：python scripts/eval_recovery_v2.py
 读取 outputs/hjepa/ckpts/recovery_v2/<情景>_s<种子>_<tree1|post>/evowm_l1_object.ckpt；
-逐个结果写到 outputs/recovery_v2/*.json，报告写到 docs/results/sim_recovery_v2.md。
+逐个结果写到 outputs/recovery_v2/*.json，报告写到 outputs/recovery_v2/sim_recovery_v2.md（入库版本在 docs/results/，由本地复制）。
 """
 import json
 import sys
@@ -96,7 +96,7 @@ def main():
           f"- C2（零模型无假阳性）：种子 3 {yn(c2[3])}，种子 4 {yn(c2[4])}",
           f"- C3（排序 ρ ≥ 0.7 且零模型对比 < 25%）：种子 3 {yn(c3[3])}，种子 4 {yn(c3[4])}",
           "- C4（t½ 在 6 到 24 Myr）：" + "，".join(f"{k} {yn(v)}" for k, v in c4.items())]
-    rep = ROOT / "docs/results/sim_recovery_v2.md"
+    rep = ROOT / "outputs/recovery_v2/sim_recovery_v2.md"
     rep.write_text("\n".join(L) + "\n", encoding="utf-8")
     (out_dir / "criteria.json").write_text(json.dumps({"criteria": crit, "C1": c1, "C2": c2, "C3": c3, "C4": c4},
                                                       ensure_ascii=False, indent=2), encoding="utf-8")

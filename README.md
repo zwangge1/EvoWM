@@ -16,7 +16,8 @@ EvoWM/
 ├─ docs/
 │  ├─ design/          当前设计
 │  ├─ context/         数据盘点等背景记录
-│  └─ prereg/          预注册（待写）
+│  ├─ prereg/          预注册（每次检验跑之前写定）
+│  └─ results/         入库的结果报告（只在本地从 outputs/ 复制进来再提交）
 ├─ data/
 │  ├─ MANIFEST.md      每个文件的来源、大小、sha256（scripts/make_manifest.py 生成）
 │  ├─ raw/             原始数据，只读
@@ -31,7 +32,7 @@ EvoWM/
 │  └─ eval/            探针、类群留出、观测空间指标
 ├─ configs/hjepa/      H-JEPA 训练配置（hydra，用 --config-dir 加载，不改上游配置）
 ├─ scripts/            可执行入口；exploratory/ 只放选方向用的探索
-└─ outputs/            每次运行一个子目录
+└─ outputs/            运行产生的一切（检查点、日志、json、报告），git 忽略
 ```
 
 ## 运行
@@ -44,6 +45,17 @@ EvoWM/
    CPU 冒烟测试：`bash scripts/train_hjepa.sh evowm_l2 data.dataset.species_table=data/processed/sim/smoke/species_traits.csv data.dataset.n_trees=10 trainer.accelerator=cpu trainer.precision=32 trainer.max_epochs=1 +trainer.limit_train_batches=40 num_workers=2`
 
 环境：`conda env create -f environment.yml`（Python 3.11、torch 2.7.1，与上游一致）。
+
+## 三处分工（本地、服务器、云端）
+
+代码和文档只有一个入口，生成物只往 `outputs/` 写，这样服务器上 `git pull` 不会冲突。
+
+1. **本地（Windows，`Desktop\FFY\EvoWM`）**：唯一提交、推送的地方。Claude 改的文件同步到这里，由你提交推送。
+2. **服务器（A100，`/mnt/zihanw/EvoWM`）**：只做 `git pull` 和运行，不在仓库里改文件、不提交。脚本的所有输出（检查点、日志、json、报告）都写进 `outputs/`。
+3. **回传**：服务器 `outputs/<名字>/` 下的报告和 json 原样下载到本地 `outputs/<名字>/`，路径保持一致。要入库的报告由本地复制到 `docs/results/` 再提交。
+4. **云端（Claude 的工作区）**：写代码、做不需要 GPU 的计算；通过桌面端读写本地文件夹，碰不到服务器。
+
+服务器上 `git pull` 报 `untracked working tree files would be overwritten` 时，说明有文件被写进了仓库目录，把它挪到 `outputs/` 下再拉。
 
 ## 数据注意
 

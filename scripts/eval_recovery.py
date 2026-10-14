@@ -2,7 +2,7 @@
 
 在 EvoWM 根目录运行：python scripts/eval_recovery.py
 读取 outputs/hjepa/ckpts/recovery_v1/<情景>_s<种子>/evowm_l2_object.ckpt；
-逐个结果写到 outputs/recovery_v1/*.json，报告写到 docs/results/sim_recovery_v1.md。
+逐个结果写到 outputs/recovery_v1/*.json，报告写到 outputs/recovery_v1/sim_recovery_v1.md（入库版本在 docs/results/，由本地复制）。
 """
 import json
 import sys
@@ -87,7 +87,7 @@ def main():
     for name, res in results.items():
         lines.append(f"| {name} | " + " | ".join(f"{v:.3f}" for v in res["probe_r2_val"].values()) + " |")
     lines += ["", "## C2 明细", ""] + [f"- {k}: {yn(v)}" for k, v in c2_detail.items()]
-    rep = ROOT / "docs/results/sim_recovery_v1.md"
+    rep = ROOT / "outputs/recovery_v1/sim_recovery_v1.md"
     rep.parent.mkdir(parents=True, exist_ok=True)
     rep.write_text("\n".join(lines) + "\n", encoding="utf-8")
     (out_dir / "criteria.json").write_text(json.dumps({"criteria": crit, "C2_detail": c2_detail}, ensure_ascii=False, indent=2),

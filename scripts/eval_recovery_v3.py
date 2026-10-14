@@ -9,10 +9,11 @@
 - E3：5 折的（距离，敏感度）合并后按 v2 的方法拟合 t½，另列各折单独拟合的值。
 
 在 EvoWM 根目录运行：
-  python scripts/eval_recovery_v3.py                 # 开发种子 1、2，报告写到 docs/results/sim_recovery_v3_dev.md
-  python scripts/eval_recovery_v3.py --seeds 5 6     # 检验种子：按预注册判定，报告写到 docs/results/sim_recovery_v3.md；
+  python scripts/eval_recovery_v3.py                 # 开发种子 1、2，报告写到 outputs/recovery_v3/sim_recovery_v3_dev.md
+  python scripts/eval_recovery_v3.py --seeds 5 6     # 检验种子：按预注册判定，报告写到 outputs/recovery_v3/sim_recovery_v3.md；
                                                      # docs/prereg/sim_recovery_v3.md 不存在时拒绝运行
-逐个结果写到 outputs/recovery_v3/<情景>_s<种子>.json。
+逐个结果写到 outputs/recovery_v3/<情景>_s<种子>.json。所有输出都在 outputs/（git 忽略）；
+要入库的报告由本地复制到 docs/results/ 后提交（见 README"三处分工"）。
 """
 import argparse
 import json
@@ -231,12 +232,12 @@ def main():
     if test:
         crit = criteria(res, raws, seeds)
         (out_dir / "criteria.json").write_text(json.dumps(crit, ensure_ascii=False, indent=2), encoding="utf-8")
-        rep = ROOT / "docs/results/sim_recovery_v3.md"
+        rep = out_dir / "sim_recovery_v3.md"
         report(res, seeds, rep, crit)
         print("判据：", {k: crit[k] for k in ("C1", "C2", "C3", "C4")})
         print(f"效应合并转变对增益 {ci(crit['pooled_transition_effect'])}，零模型 {ci(crit['pooled_transition_null'])}")
     else:
-        rep = ROOT / "docs/results/sim_recovery_v3_dev.md"
+        rep = out_dir / "sim_recovery_v3_dev.md"
         report(res, seeds, rep)
     print(f"报告：{rep}")
 
