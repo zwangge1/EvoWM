@@ -138,8 +138,8 @@ def _normalize_uint8_images_on_device(batch):
         batch[key] = value.float().div(255.0).sub(mean).div(std)
 
 
-def _hjepa_training_forward(self, batch, stage, cfg):
-    return hjepa_forward(
+def _hjepa_training_forward(self, batch, stage, cfg, forward_fn=None):
+    return (forward_fn or hjepa_forward)(
         self,
         batch,
         stage,
@@ -198,7 +198,10 @@ def run(cfg):
     ##############################
 
     normalizer_artifact = build_normalizer_artifact(cfg, train_dataset)
-    world_model, losses = create_world_model(cfg)
+    create_fn, forward_fn = create_world_model, None
+    if cfg.get("evowm_units", False):  # EvoWM: habit-event upper levels (../../src/evowm/models/units.py)
+        from evowm.models.units import create_world_model as create_fn, units_forward as forward_fn
+    world_model, losses = create_fn(cfg)
     world_model.normalizer_artifact = normalizer_artifact
     models = {
         "model": world_model,
@@ -233,7 +236,7 @@ def run(cfg):
     world_model = GradClipModule(
         **models,
         **losses,
-        forward=partial(_hjepa_training_forward, cfg=cfg),
+        forward=partial(_hjepa_training_forward, cfg=cfg, forward_fn=forward_fn),
         optim=optimizers,
     )
     world_model._train_cfg = cfg

@@ -18,3 +18,10 @@
 | 日期 | 文件 | 改动 | 原因 |
 |---|---|---|---|
 | 2026-10-13 | h_jepa/data.py | `build_hdf5_dataset` 增加 `type: evowm_transect` 分支，返回 `evowm.data.transect.TreeTransectDataset`；原 droid 分支改为先取出 type 再判断，行为不变 | 接入系统发育样带数据，写法仿上游的 DROID 分支 |
+| 2026-10-15 | h_jepa/main_hjepa.py | 配置有 `evowm_units: true` 时改用 `evowm.models.units` 的 `create_world_model` 与 `units_forward`；`_hjepa_training_forward` 增加可选参数 `forward_fn`（默认仍为 `hjepa_forward`）。其他配置行为不变 | 按习性尺度分层（设计草案 `docs/design/第二层设计草案_2026-10-15.md`）：上层单位按习性事件分段、长度可变，上游按固定步长分块的 `encode_hierarchical` 用不了。各层仍是上游的 JEPA 对象，第 1 层的损失与上游逐位相同 |
+
+## 方法上的扩展（不改上游文件，代码在 `../src/evowm/`）
+
+| 日期 | 扩展 | 与上游的不同 |
+|---|---|---|
+| 2026-10-15 | 按习性事件分块的上层（`evowm/data/units.py`、`evowm/models/units.py`） | 上游的上层按固定步长、固定窗口分块；这里的分块边界是叶序上运动方式（第 2 层）或栖境（第 3 层）改变的位置，单位长度可变。上层状态是单位成员下层表示的掩码平均再经上层编码器（上游是固定窗口的下层表示）；上层动作直接由单位的平均习性之差与成员间平均进化距离构成（上游把下层动作序列再编码一次）。理由见设计草案第 1、2 节；分层世界模型里按事件分块的先例：THICK（Gumbsch 等，ICLR 2024） |

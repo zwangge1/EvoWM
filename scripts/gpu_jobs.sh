@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 按卡并行训练一批模型（默认配置 recovery_v3_l1，单卡 fp32，与 v3、v4 相同；CONFIG 可换配置，例如 recovery_v5_l1）。
-# 用法（EvoWM 根目录）：[CONFIG=recovery_v5_l1] bash scripts/gpu_jobs.sh <任务清单> <日志目录> <检查点子目录>
+# 用法（EvoWM 根目录）：[CONFIG=recovery_v5_l1] [CKPT_NAME=evowm_l1] bash scripts/gpu_jobs.sh <任务清单> <日志目录> <检查点子目录>
+# CKPT_NAME 是配置里的 output_model_name（按习性分层的模型为 evowm_hab2、evowm_hab3），用来判断任务是否已完成。
 # 任务清单每行："<名字> <hydra 覆盖项...>"。GPUS 里每张卡一个工作进程，按行号轮流领任务；已有检查点的任务跳过。
 set -euo pipefail
 LIST=$1
@@ -9,12 +10,13 @@ PREFIX=$3
 GPUS="${GPUS:-0 1 2 3}"
 WORKERS="${WORKERS:-4}"
 CONFIG="${CONFIG:-recovery_v3_l1}"
+CKPT_NAME="${CKPT_NAME:-evowm_l1}"
 mapfile -t JOBS < "$LIST"
 
 run_job () {  # $1 卡号 $2 名字 其余为覆盖项
   local g=$1 name=$2
   shift 2
-  if [ -f "outputs/hjepa/ckpts/$PREFIX/$name/evowm_l1_object.ckpt" ]; then
+  if [ -f "outputs/hjepa/ckpts/$PREFIX/$name/${CKPT_NAME}_object.ckpt" ]; then
     echo "skip $name" >> "$LOG/progress.txt"
     return 0
   fi

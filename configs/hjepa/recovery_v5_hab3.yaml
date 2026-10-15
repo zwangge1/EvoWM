@@ -1,0 +1,46 @@
+# 按习性尺度分层的三层模型：在 recovery_v5_hab2 上加第 3 层（栖境：陆、水、空）。第 3 层的单位由完整的运动方式单位组成，
+# 状态为所含运动方式单位的第 2 层表示取平均再经第 3 层编码器；动作为栖境单位一级的习性变化。
+# 第 3 层的去留由开发检查按设计草案第 6 节的规则决定。
+defaults:
+- recovery_v5_hab2
+- _self_
+output_model_name: evowm_hab3
+num_levels: 3
+data:
+  dataset:
+    units:
+      levels: [locomotor, realm]
+level3:
+  lr: 3.0e-04
+  wm:
+    history_size: 3
+    rollout_n: 1
+    rollout_loss_weight: 1.0
+    embed_dim: 128
+    use_proprio: false
+    action_dim: 52
+  encoder:
+    type: latent_mlp
+    input_dim: ${level2.wm.embed_dim}
+    hidden_dim: 256
+    final_ln: false
+    output_dim: ${level3.wm.embed_dim}
+    projector:
+      type: identity
+  action_embed:
+    patch_embed: false
+  predictor:
+    depth: 3
+    heads: 4
+    mlp_dim: 512
+    dim_head: 32
+    dropout: 0.1
+    emb_dropout: 0.0
+    hidden_dim: 128
+    projector:
+      type: mlp
+  loss:
+    embed:
+      sigreg:
+        enabled: true
+        weight: 0.09

@@ -18,11 +18,13 @@ N_FOLDS = 5
 LOCOMOTOR = ["insessorial", "terrestrial", "aerial", "wading", "diving", "surface", "generalist"]
 
 
-def fold_datasets(root: Path, table_rel: str, tree_file: str, fold: int, action_mode: str = "full"):
+def fold_datasets(root: Path, table_rel: str, tree_file: str, fold: int, action_mode: str = "full",
+                  units: dict | None = None):
+    """units 不为空时（按习性分层的模型），数据集同时给出上层单位；叶序与窗口的随机数用法不变。"""
     from evowm.data.transect import TreeTransectDataset
     kw = dict(species_table=table_rel, tree_file=tree_file, level1={"frameskip": 1, "num_steps": 4}, evowm_root=str(root),
               n_trees=1, holdout={"level": "family", "frac": 0, "folds": N_FOLDS, "fold": fold, "seed": 0}, n_orders=4,
-              action_mode=action_mode)
+              action_mode=action_mode, units=units)
     return TreeTransectDataset(name="evowm_train", **kw), TreeTransectDataset(name="evowm_val", **kw)
 
 
@@ -103,15 +105,47 @@ def run_task(task: dict) -> dict:
     return out
 
 
-def run_all(tasks: list[dict], workers: int | None = None) -> list[dict]:
+def run_unit_task(task: dict) -> dict:
+    """按习性分层模型的评估（设计草案 docs/design/第二层设计草案_2026-10-15.md 第 5 节）。task 同 run_task。
+    第 1 层读数用与 run_task 相同的 evaluate_run（运动方式变化对与相同对上的相对跗跖误差）；模型有上层时再算
+    evowm.eval.units 的上层读数。只训第 1 层的模型只算第 1 层读数（开发检查里作对照）。"""
+    import torch
+    torch.set_num_threads(1)
+    from evowm.eval.recovery import evaluate_run, load_world_model
+    from evowm.eval.units import evaluate_units
+    from evowm.sim.regimes import regime_locomotor
+    root = Path(task["root"])
+    table = pd.read_csv(root / task["table_rel"])
+    if task.get("real") or "sim_regime" not in table.columns:
+        table["sim_regime"] = regime_locomotor(table).to_numpy()
+    ckpt = Path(task["ckpt"])
+    model = load_world_model(ckpt, root / "hjepa")
+    units = getattr(model, "evowm_units", None)
+    ds_tr, ds_va = fold_datasets(root, task["table_rel"], task["tree_file"], task["fold"], ckpt_action_mode(ckpt),
+                                 units=units)
+    raw: dict = {}
+    res = evaluate_run(ds_tr, ds_va, model, table, None, n_orders=8, seed=task["seed"], raw=raw, regimes=LOCOMOTOR)
+    r1 = {"E1_state": raw["E1_state"], "slope": float(res["E2_relative"]["allometric_slopes"]["m_tarsus"])}
+    rel_eco, rel_no = relative_errors(r1)
+    out = {"key": task["key"], "fold": task["fold"],
+           "L1": {"rel_eco": rel_eco, "rel_no": rel_no, "family": raw["E1"]["m_tarsus"]["family"],
+                  "transition": raw["E1"]["m_tarsus"]["transition"]},
+           "L1_res": {k: res[k] for k in ("probe_r2_val", "E1_transition")}}
+    if units:
+        out["units"] = evaluate_units(ds_tr, ds_va, model, table, n_orders=8, seed=task["seed"])
+    return out
+
+
+def run_all(tasks: list[dict], workers: int | None = None, fn=None) -> list[dict]:
+    fn = fn or run_task
     workers = int(workers or os.environ.get("EVAL_WORKERS", 8))
     os.environ.setdefault("OMP_NUM_THREADS", "1")
     os.environ.setdefault("MKL_NUM_THREADS", "1")
     if workers <= 1:
-        return [run_task(t) for t in tasks]
+        return [fn(t) for t in tasks]
     with ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn")) as ex:
         out = []
-        for i, r in enumerate(ex.map(run_task, tasks)):
+        for i, r in enumerate(ex.map(fn, tasks)):
             out.append(r)
             print(f"  评估 {i + 1}/{len(tasks)}：{r['key']} 折 {r['fold']}", flush=True)
         return out

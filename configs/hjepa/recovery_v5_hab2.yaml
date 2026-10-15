@@ -1,0 +1,52 @@
+# 按习性尺度分层的两层模型（设计草案 docs/design/第二层设计草案_2026-10-15.md 第 4 节）。
+# 第 1 层与 recovery_v5_l1 完全相同（动作只含习性变化，52 维）；第 2 层的单位是叶序上连续的、运动方式相同的物种
+# （evowm.data.units），状态为单位成员第 1 层嵌入的平均再经第 2 层编码器，动作为单位一级的习性变化（52 维，与第 1 层同构）。
+# 两层联合训练，总损失为两层之和。evowm_units 为真时，上游 main_hjepa.py 改用 src/evowm/models/units.py 的
+# create_world_model 与 units_forward（登记在 hjepa/UPSTREAM.md）。
+defaults:
+- recovery_v5_l1
+- _self_
+output_model_name: evowm_hab2
+num_levels: 2
+evowm_units: true
+data:
+  dataset:
+    units:
+      levels: [locomotor]
+      history: ${level2.wm.history_size}
+      max_members: 16      # 每个单位至多抽的物种数（训练时随机抽；评估用全部成员）
+      max_subunits: 8      # 每个栖境单位至多抽的运动方式单位数（第 3 层用）
+level2:
+  lr: 3.0e-04
+  wm:
+    history_size: 3
+    rollout_n: 1
+    rollout_loss_weight: 1.0
+    embed_dim: 128
+    use_proprio: false
+    action_dim: 52       # 单位一级的动作维数，与第 1 层相同
+  encoder:
+    type: latent_mlp
+    input_dim: ${level1.wm.embed_dim}
+    hidden_dim: 256
+    final_ln: false
+    output_dim: ${level2.wm.embed_dim}
+    projector:
+      type: identity
+  action_embed:
+    patch_embed: false
+  predictor:
+    depth: 3
+    heads: 4
+    mlp_dim: 512
+    dim_head: 32
+    dropout: 0.1
+    emb_dropout: 0.0
+    hidden_dim: 128
+    projector:
+      type: mlp
+  loss:
+    embed:
+      sigreg:
+        enabled: true
+        weight: 0.09
