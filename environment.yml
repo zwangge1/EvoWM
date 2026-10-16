@@ -33,3 +33,5 @@ dependencies:
       - scikit-learn
       - matplotlib
       - psutil
+      # 工程验证的落震仿真（src/evowm/engineering/drop.py）；版本固定，接触求解的行为随版本变
+      - exudyn==1.13.6
