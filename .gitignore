@@ -9,5 +9,6 @@ data/interim/
 data/processed/*
 !data/processed/.gitkeep
 data/raw/birdtree/*_100.nwk
+data/raw/ponti2025/trees_ex.nex
 
 *.zip

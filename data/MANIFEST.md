@@ -1,4 +1,4 @@
-# 数据清单（2026-10-13，由 scripts/make_manifest.py 生成）
+# 数据清单（2026-10-18，由 scripts/make_manifest.py 生成）
 
 `data/raw/` 与 `data/prior_results/` 只读。新增数据先在脚本的 SOURCES 里登记来源，再重新生成本文件。
 
@@ -48,6 +48,28 @@
 | `avonet_hwi.csv` | 1.0 MB | `4df32f61f81c4dca96e6476ad330be78864d148c778743f3905a277e7bbedee4` |
 | `avonet_joined_all.csv` | 856.0 KB | `57b3c9c5d46fd0ff285b6ae51bfe9a4a764b7a0d00c8be7f1b42577d91002976` |
 | `forstrat_dom.csv` | 324.3 KB | `2ea7f485a3bd2c90d89a9a3c78f5dc2bacf57b06bd0ceca99496f15f14696647` |
+
+## raw/ponti2025
+
+来源：岛屿特有种与最近的大陆近缘种配对的形态（Ponti et al. 2025, Global Ecology and Biogeography 34(11)；Dryad doi:10.5061/dryad.1zcrjdg57），2026-10-18 下载，文件名保持原样。CSV 以分号分隔、Latin-1 编码、每行一件标本；trees_ex.nex 为加入灭绝种的 100 棵 Ericson 树，太大不入库
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `README.md` | 3.5 KB | `3e4c7c8acd1854656b020732caea85c52970f0bc2e47fcd331d0094712d851f3` |
+| `analyses_morpho.R` | 42.9 KB | `4140bfb3c84d3af088ab5b2c73d2744de0691e5b390cb97b25e8d18f8979c063` |
+| `morpho_db.csv` | 1.7 MB | `79fe71e0f10febabb68ccedd57548f7cfb32096d9c363b340bdd717d74c2d16d` |
+| `morpho_db_filtered.csv` | 808.6 KB | `13504121c078bb9e68d5e38e3b61754e02b7335b475acdbd8d96e2a6cb6bfe31` |
+| `trees_ex.nex` | 33.7 MB | `ddb097d18c26244f95f4791700445de45c81450edc54c58622bc9d5aca04da3f` |
+
+## raw/wright2016
+
+来源：岛屿与大陆鸟类骨骼标本的逐件测量与飞行肌（Wright, Steadman & Witt 2016, PNAS 113(17):4765，doi:10.1073/pnas.1522931113；figshare doi:10.6084/m9.figshare.3123148），2026-10-18 下载。两个 xlsx 由 3123148.zip 解出，文件名保持原样；zip 不入库
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `3123148.zip` | 685.8 KB | `28ecf201504512df87ea6149f8e7eba9d676c5a03922058655487046bf55a3f0` |
+| `skeletal_data.xlsx` | 525.7 KB | `4290542ebc0a1570ea62286d6797bb896a8f6294898dab849194c94e976feefa` |
+| `species_averages_flight_muscles.xlsx` | 159.7 KB | `db86a2287b598f7ca2baf8610235f251fc1084c9fcd8fcc515fbef5e2c1a5630` |
 
 ## prior_results
 

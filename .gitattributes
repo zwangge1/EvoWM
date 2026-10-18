@@ -1,1 +1,3 @@
 * text=auto eol=lf
+# 原始下载按字节入库（CRLF、Latin-1），清单里的 sha256 在服务器上也对得上
+data/raw/ponti2025/** -text
