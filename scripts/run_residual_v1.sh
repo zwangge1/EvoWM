@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# 预测变化量重训（设计 docs/design/预测变化量_重训_2026-10-19.md），可挂过夜，约 9.5 小时（4 张卡）。
+# 预测变化量重训（设计 docs/design/预测变化量_重训_2026-10-19.md），可挂过夜，约 10 小时（4 张卡）。
 # 用法（EvoWM 根目录）：GPUS="0 1 2 3" EVAL_WORKERS=16 bash scripts/run_residual_v1.sh
-# 步骤（某一步失败就记下，能做的继续做；已有检查点的任务跳过，中断后可以重跑）：
+# 步骤（某一步失败就记下，能做的继续做；已有检查点的任务跳过，中断时没训完的从最近的存档接着训，可以重跑）：
 #   A. 训练真实三层 50（Hackett）、空白模拟三层 50、v6 模拟三层 50，评估，写中间报告（含判据）；
 #   B. 训练 v5 效应模拟三层 50、真实三层 15（Ericson）；
-#   C. 训练真实与 v6 模拟只训第一层的模型各 50；评估 B、C，写最终报告。
-# 结果：outputs/residual_v1/report.md（另有 residual_v1.csv、sets/）；进度在 outputs/residual_v1/progress.txt。
+#   C. 训练真实与 v6 模拟只训第一层的模型各 50；评估 B、C，写最终报告；
+#   D. 用 OU 式对照评估重训后的模型（scripts/run_ou_v1.sh res，只用 CPU，约 30 分钟）。
+# 结果：outputs/residual_v1/report.md（另有 residual_v1.csv、sets/）、outputs/ou_v1/report_res.md；
+# 进度在 outputs/residual_v1/progress.txt。
 # 检查点：outputs/hjepa/ckpts/residual_v1/<模型集>/<运行>_f<折>/。旧模型的结果读 outputs/diag_readout_v1/sets。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -78,4 +80,10 @@ step "C start"
 train "$LOG/real_hab3.txt" recovery_v5_l1_res evowm_l1 real_l1
 train "$LOG/sim_v6.txt" recovery_v5_l1_res evowm_l1 sim_v6_l1
 evaluate sim_v5_effect_res real_hab3_ericson_res real_l1_res sim_v6_l1_res
+step "D start"
+if bash scripts/run_ou_v1.sh res > "$LOG/ou_res.txt" 2>&1; then
+  step "OU-style evaluation done (outputs/ou_v1/report_res.md)"
+else
+  step "OU-style evaluation FAILED (see outputs/ou_v1/logs/eval_res.txt)"
+fi
 step "ALLDONE"
