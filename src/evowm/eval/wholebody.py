@@ -7,6 +7,8 @@
 - 第 2 层（运动方式单位）、第 3 层（栖境单位）：与主分析相同的单位读数，换成 23 项形态；
   第 2 层的步分为栖境内、跨栖境两类。反事实与主分析 H4 相同（栖树、陆地为基准）。
 - 线性基线：每项形态各自的"只用变化"线性基线（第 1、2 层按运动方式，第 3 层按栖境），与世界模型同一批预测。
+  另有"全部习性列"的线性基线：在无习性的预测上，再加一个岭回归（残差 ~ 动作的习性部分，即世界模型拿到的同一组
+  47 列习性差与 3 个习性组标记），惩罚用留一交叉验证在训练对上选。结果放在 lin2（五种预测用同一批）。
 长度类形态扣除体重通路（相对值 = 值 − b × 体重，b 为该折训练物种上的 OLS 斜率）；体重与 HWI 不扣。
 """
 from __future__ import annotations
@@ -68,7 +70,19 @@ def step_types(la: np.ndarray, lb: np.ndarray) -> np.ndarray:
     return np.where((la < 0) | (lb < 0), -1, t)
 
 
-def _linear(v: np.ndarray, cat: np.ndarray, a_t, b_t, d_t, a, b, d) -> tuple[np.ndarray, np.ndarray]:
+def _ridge_correction(Xt: np.ndarray, rt: np.ndarray, Xv: np.ndarray, max_rows: int = 60000, seed: int = 0) -> np.ndarray:
+    """训练对上岭回归 残差 ~ 习性变化（惩罚用留一交叉验证选），返回验证对的修正量；训练对太少时返回 NaN。"""
+    from sklearn.linear_model import RidgeCV
+    ok = np.flatnonzero(np.isfinite(rt) & np.isfinite(Xt).all(axis=1))
+    if len(ok) < 50:
+        return np.full(len(Xv), np.nan)
+    if len(ok) > max_rows:
+        ok = np.random.default_rng(seed).choice(ok, max_rows, replace=False)
+    m = RidgeCV(alphas=np.logspace(-2, 4, 13)).fit(Xt[ok], rt[ok])
+    return m.predict(Xv)
+
+
+def _linear(v: np.ndarray, cat: np.ndarray, a_t, b_t, d_t, a, b, d, Xt=None, Xv=None):
     """一项形态的"只用变化"线性基线（evowm.eval.runs.linear_baseline 的推广）：
     无习性 v̂_B = μ + exp(−αd)(v_A − μ)；只用变化再加 κ(μ_c(B) − μ_c(A))。μ_c 为训练物种各类的均值（类别 -1 用 μ）。
     a_t, b_t, d_t 为训练窗口的相邻对；a, b, d 为要预测的对。返回 (无习性误差, 只用变化误差)。"""
@@ -76,7 +90,7 @@ def _linear(v: np.ndarray, cat: np.ndarray, a_t, b_t, d_t, a, b, d) -> tuple[np.
     ok = tr_rows[np.isfinite(v[tr_rows])]
     if len(ok) < 10:
         nan = np.full(len(a), np.nan)
-        return nan, nan
+        return (nan, nan) if Xt is None else (nan, nan, nan)
     mu = float(np.mean(v[ok]))
     cats = np.unique(cat[ok][cat[ok] >= 0])
     mu_c = {int(c): float(np.mean(v[ok][cat[ok] == c])) for c in cats}
@@ -93,7 +107,45 @@ def _linear(v: np.ndarray, cat: np.ndarray, a_t, b_t, d_t, a, b, d) -> tuple[np.
     nz = dl != 0
     kappa = float(np.clip(np.sum(res[nz] * dl[nz]) / max(float(np.sum(dl[nz] ** 2)), 1e-12), 0.0, 1.0))
     base = mu + np.exp(-alpha * d) * (v[a] - mu)
-    return base - v[b], base + kappa * (m_c[b] - m_c[a]) - v[b]
+    if Xt is None:
+        return base - v[b], base + kappa * (m_c[b] - m_c[a]) - v[b]
+    rt = v[b_t] - (mu + np.exp(-alpha * d_t) * (v[a_t] - mu))
+    full = base + _ridge_correction(Xt, rt, Xv)
+    return base - v[b], base + kappa * (m_c[b] - m_c[a]) - v[b], full - v[b]
+
+
+def _lin2(fam, typ, ee, en, l_no, l_ch, l_f, F: int) -> dict:
+    """世界模型（有、无习性）与三种线性预测（无习性、只用类别、全部习性列）在同一批预测上的平方误差和。"""
+    ok = np.isfinite(ee) & np.isfinite(en) & np.isfinite(l_no) & np.isfinite(l_ch) & np.isfinite(l_f)
+    out = {}
+    for k, e in (("w_eco", ee), ("w_no", en), ("l_no", l_no), ("l_ch", l_ch), ("l_full", l_f)):
+        out[k], n = agg(fam, typ, np.where(ok, e ** 2, np.nan), F, 3)
+    out["n"] = n
+    return out
+
+
+def _linear_units_full(tr, va, name: str, r_tr: list, r_va: list, oi, prev, target) -> tuple[np.ndarray, np.ndarray]:
+    """单位一级的"全部习性列"线性基线：无习性部分与 evowm.eval.units.linear_units 相同（同样的 μ、α 拟合），
+    再加岭回归（残差 ~ 单位动作的习性部分）。返回 (无习性误差, 全部习性列误差)，与 e1 的预测顺序一致。"""
+    rt_all = np.concatenate(r_tr)
+    mu = float(np.nanmean(rt_all))
+    a_t = np.concatenate([r[:-1] for r in r_tr])
+    b_t = np.concatenate([r[1:] for r in r_tr])
+    d_t = np.concatenate([o.levels[name].dist for o in tr])
+    Xt = np.concatenate([o.levels[name].action[:-1, :-2] for o in tr])
+
+    def f(log_alpha):
+        return float(np.nanmean((mu + np.exp(-np.exp(log_alpha) * d_t) * (a_t - mu) - b_t) ** 2))
+    alpha = float(np.exp(minimize_scalar(f, bounds=(np.log(1e-4), np.log(2.0)), method="bounded").x))
+    res = b_t - (mu + np.exp(-alpha * d_t) * (a_t - mu))
+    rv = np.concatenate(r_va)
+    off = np.concatenate([[0], np.cumsum([len(r) for r in r_va])])
+    dv = np.concatenate([np.append(o.levels[name].dist, np.nan) for o in va])
+    Xv_all = np.concatenate([o.levels[name].action[:, :-2] for o in va])
+    ga, gb = off[oi] + prev, off[oi] + target
+    base = mu + np.exp(-alpha * dv[ga]) * (rv[ga] - mu)
+    full = base + _ridge_correction(Xt, res, Xv_all[ga])
+    return base - rv[gb], full - rv[gb]
 
 
 # ---------------------------------------------------------------------------
@@ -130,11 +182,15 @@ def eval_l1(ds_tr, ds_va, model, table: pd.DataFrame, fam_codes: np.ndarray, F: 
     a_t, b_t, d_t = Wt.rows[:, :H].reshape(-1), Wt.rows[:, 1:H + 1].reshape(-1), Wt.dist[:, :H].reshape(-1)
     a, bb, d = prv.reshape(-1), tgt.reshape(-1), W.dist[:, :H].reshape(-1)
     R = rel(S, b, jm)
-    lin_no, lin_ch = np.full((len(a), C), np.nan), np.full((len(a), C), np.nan)
+    A_dim = act_eco.shape[-1]
+    Xt = np.stack([ds_tr.build_action(r, dd, eco=True) for r, dd in zip(Wt.rows, Wt.dist)])[:, :H].reshape(-1, A_dim)[:, :-2]
+    Xv = act_eco[:, :H].reshape(-1, A_dim)[:, :-2]
+    lin_no, lin_ch, lin_f = (np.full((len(a), C), np.nan) for _ in range(3))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         for j in range(C):
-            lin_no[:, j], lin_ch[:, j] = _linear(R[:, j], loco, a_t, b_t, d_t, a, bb, d)
+            lin_no[:, j], lin_ch[:, j], lin_f[:, j] = _linear(R[:, j], loco, a_t, b_t, d_t, a, bb, d, Xt, Xv)
+    lin2 = _lin2(fam, typ, ee, en, lin_no, lin_ch, lin_f, F)
     ok_both = np.isfinite(ee) & np.isfinite(lin_no) & np.isfinite(lin_ch)
     sl_no, nl = agg(fam, typ, np.where(ok_both, lin_no ** 2, np.nan), F, 3)
     sl_ch, _ = agg(fam, typ, np.where(ok_both, lin_ch ** 2, np.nan), F, 3)
@@ -167,7 +223,7 @@ def eval_l1(ds_tr, ds_va, model, table: pd.DataFrame, fam_codes: np.ndarray, F: 
                 s_e2[:, k], n_e2[:, k] = s[:, 0], nn[:, 0]
     sd = np.nanstd(R[rows_tr], axis=0)
     return {"s_eco": s_eco, "s_no": s_no, "n": n, "lin": {"s_no": sl_no, "s_ch": sl_ch, "w_eco": sw_eco, "w_no": sw_no, "n": nl},
-            "e2": {"s": s_e2, "n": n_e2, "labels": LOCOMOTOR[1:]}, "slopes": b, "sd": sd}
+            "lin2": lin2, "e2": {"s": s_e2, "n": n_e2, "labels": LOCOMOTOR[1:]}, "slopes": b, "sd": sd}
 
 
 def eval_units_wb(ds_tr, ds_va, model, table: pd.DataFrame, fam_codes: np.ndarray, F: int, n_orders: int, seed: int,
@@ -201,7 +257,7 @@ def eval_units_wb(ds_tr, ds_va, model, table: pd.DataFrame, fam_codes: np.ndarra
         fam = famv[gt]
         s_eco, n = agg(fam, typ, ee ** 2, F, 3)
         s_no, _ = agg(fam, typ, en ** 2, F, 3)
-        lin_no, lin_ch = np.full(ee.shape, np.nan), np.full(ee.shape, np.nan)
+        lin_no, lin_ch, lin_f = (np.full(ee.shape, np.nan) for _ in range(3))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             for j in range(C):
@@ -211,6 +267,8 @@ def eval_units_wb(ds_tr, ds_va, model, table: pd.DataFrame, fam_codes: np.ndarra
                     continue
                 lu = linear_units(tr, va, name, r_tr, r_va, e1["order"], e1["prev"], e1["target"])
                 lin_no[:, j], lin_ch[:, j] = lu["err_no"], lu["err_change"]
+                _, lin_f[:, j] = _linear_units_full(tr, va, name, r_tr, r_va, e1["order"], e1["prev"], e1["target"])
+        lin2 = _lin2(fam, typ, ee, en, lin_no, lin_ch, lin_f, F)
         ok_both = np.isfinite(ee) & np.isfinite(lin_no) & np.isfinite(lin_ch)
         sl_no, nl = agg(fam, typ, np.where(ok_both, lin_no ** 2, np.nan), F, 3)
         sl_ch, _ = agg(fam, typ, np.where(ok_both, lin_ch ** 2, np.nan), F, 3)
@@ -230,7 +288,7 @@ def eval_units_wb(ds_tr, ds_va, model, table: pd.DataFrame, fam_codes: np.ndarra
                     s, nn = agg(famv[g2], np.zeros(len(g2), int), rel(e2["pred"][ci] - e2["pred"][base_c], b, jm), F, 1)
                     s_e2[:, k], n_e2[:, k] = s[:, 0], nn[:, 0]
         out[name] = {"s_eco": s_eco, "s_no": s_no, "n": n,
-                     "lin": {"s_no": sl_no, "s_ch": sl_ch, "w_eco": sw_eco, "w_no": sw_no, "n": nl},
+                     "lin": {"s_no": sl_no, "s_ch": sl_ch, "w_eco": sw_eco, "w_no": sw_no, "n": nl}, "lin2": lin2,
                      "e2": {"s": s_e2, "n": n_e2, "labels": labels},
                      "sd": np.nanstd(rel(Ytr, b, jm), axis=0)}
     return out
