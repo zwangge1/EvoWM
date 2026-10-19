@@ -202,6 +202,9 @@ def run(cfg):
     if cfg.get("evowm_units", False):  # EvoWM: habit-event upper levels (../../src/evowm/models/units.py)
         from evowm.models.units import create_world_model as create_fn, units_forward as forward_fn
     world_model, losses = create_fn(cfg)
+    if cfg.get("evowm_residual", False):  # EvoWM: predict the change (../../src/evowm/models/residual.py)
+        from evowm.models.residual import enable_residual
+        logging.info(f"evowm_residual: predictor predicts the change at levels {enable_residual(world_model)}")
     world_model.normalizer_artifact = normalizer_artifact
     models = {
         "model": world_model,

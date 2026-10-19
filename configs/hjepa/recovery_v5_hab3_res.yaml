@@ -1,0 +1,7 @@
+# 预测变化量（设计 docs/design/预测变化量_重训_2026-10-19.md）：与 recovery_v5_hab3 完全相同，只是每一层的预测器输出
+# "前一个的表示 + 预测的变化量"，变化量一支（预测器投影头）的最后一个线性层初始化为 0，训练开始时等于照抄表示。
+# 开关由上游 main_hjepa.py 读取，实现在 src/evowm/models/residual.py（登记在 hjepa/UPSTREAM.md）。
+defaults:
+- recovery_v5_hab3
+- _self_
+evowm_residual: true

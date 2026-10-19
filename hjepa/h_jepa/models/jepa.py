@@ -357,7 +357,10 @@ class JEPA(nn.Module):
         emb: (B, T, D)
         act_emb: (B, T, A_emb)
         """
-        return self.predictor(emb, act_emb)
+        pred = self.predictor(emb, act_emb)
+        if getattr(self, "residual_predict", False):  # EvoWM: predict the change (../../src/evowm/models/residual.py)
+            pred = emb + pred
+        return pred
 
     def parallel_unroll(self, emb, act_emb, nsteps):
         """nsteps passes over the band: each pass predicts frames 1..T-1 from the previous pass (the
