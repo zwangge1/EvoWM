@@ -17,6 +17,10 @@ SOURCES = {
     "raw/eltontraits_derived": "旧仓库派生表：AVONET 并 EltonTraits 1.0（Wilman et al. 2014, Ecology 95:2027，经 R 包 traitdata）。复制自 Desktop\\FFY\\FFY\\data\\；原始 BirdFuncDat 待取",
     "raw/ponti2025": "岛屿特有种与最近的大陆近缘种配对的形态（Ponti et al. 2025, Global Ecology and Biogeography 34(11)；Dryad doi:10.5061/dryad.1zcrjdg57），2026-10-18 下载，文件名保持原样。CSV 以分号分隔、Latin-1 编码、每行一件标本；trees_ex.nex 为加入灭绝种的 100 棵 Ericson 树，太大不入库",
     "raw/wright2016": "岛屿与大陆鸟类骨骼标本的逐件测量与飞行肌（Wright, Steadman & Witt 2016, PNAS 113(17):4765，doi:10.1073/pnas.1522931113；figshare doi:10.6084/m9.figshare.3123148），2026-10-18 下载。两个 xlsx 由 3123148.zip 解出，文件名保持原样；zip 不入库",
+    "raw/alerstam2007": "鸟类飞行速度与翼形测量（Alerstam et al. 2007, PLoS Biology 5(8):e197, doi:10.1371/journal.pbio.0050197），Protocol S1：逐种翼展、翅面积、体重等，PDF 表，2026-10-21 下载",
+    "raw/fox2026_wingspan": "翼展数据库：1,442 种实测翼展与 10,618 种按目回归预测的翼展（Fox, Brunton & Shephard 2026, bioRxiv doi:10.64898/2026.04.27.720532；figshare doi:10.6084/m9.figshare.32089083，CC BY 4.0），2026-10-21 下载",
+    "raw/serrano2017": "83 种现生鸟 188 只的体重、翼展与升力面积（Serrano et al. 2017, Paleobiology 43(1):144, doi:10.1017/pab.2016.24），马拉加大学仓库的作者接受稿 PDF，表在附录，2026-10-21 下载",
+    "raw/tanaka2018": "现生鸟翅面积、翼展、体重与足迹（Tanaka 2018, Dryad doi:10.5061/dryad.4h1n1），online data package.xlsx 由 zip 解出，2026-10-21 下载",
     "prior_results": "旧仓库生物侧结果。复制自 Desktop\\FFY\\FFY\\outputs\\phylo\\ 与 outputs\\pgls\\",
 }
 

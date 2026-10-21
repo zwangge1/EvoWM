@@ -1,4 +1,4 @@
-# 数据清单（2026-10-18，由 scripts/make_manifest.py 生成）
+# 数据清单（2026-10-21，由 scripts/make_manifest.py 生成）
 
 `data/raw/` 与 `data/prior_results/` 只读。新增数据先在脚本的 SOURCES 里登记来源，再重新生成本文件。
 
@@ -70,6 +70,39 @@
 | `3123148.zip` | 685.8 KB | `28ecf201504512df87ea6149f8e7eba9d676c5a03922058655487046bf55a3f0` |
 | `skeletal_data.xlsx` | 525.7 KB | `4290542ebc0a1570ea62286d6797bb896a8f6294898dab849194c94e976feefa` |
 | `species_averages_flight_muscles.xlsx` | 159.7 KB | `db86a2287b598f7ca2baf8610235f251fc1084c9fcd8fcc515fbef5e2c1a5630` |
+
+## raw/alerstam2007
+
+来源：鸟类飞行速度与翼形测量（Alerstam et al. 2007, PLoS Biology 5(8):e197, doi:10.1371/journal.pbio.0050197），Protocol S1：逐种翼展、翅面积、体重等，PDF 表，2026-10-21 下载
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `pbio.0050197.sd001.pdf` | 177.6 KB | `edd8521bf8d60774bed5677a99e53942790653f3426bb0071eef9f94dabe8c76` |
+
+## raw/fox2026_wingspan
+
+来源：翼展数据库：1,442 种实测翼展与 10,618 种按目回归预测的翼展（Fox, Brunton & Shephard 2026, bioRxiv doi:10.64898/2026.04.27.720532；figshare doi:10.6084/m9.figshare.32089083，CC BY 4.0），2026-10-21 下载
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `AppendixS1_wingspan_data_all.xlsx` | 4.9 MB | `6b55747a5761c08356d92c7a0b524b4e586c28a25316b0a6c1de3738db1d8eda` |
+
+## raw/serrano2017
+
+来源：83 种现生鸟 188 只的体重、翼展与升力面积（Serrano et al. 2017, Paleobiology 43(1):144, doi:10.1017/pab.2016.24），马拉加大学仓库的作者接受稿 PDF，表在附录，2026-10-21 下载
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `Serrano2017_Paleobiology_accepted.pdf` | 2.2 MB | `f2bd97422b6f750ec2a452b487c4867cc4578f55211fed937bad7c4d974dd298` |
+
+## raw/tanaka2018
+
+来源：现生鸟翅面积、翼展、体重与足迹（Tanaka 2018, Dryad doi:10.5061/dryad.4h1n1），online data package.xlsx 由 zip 解出，2026-10-21 下载
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `doi_10_5061_dryad_4h1n1__v20180103.zip` | 23.2 KB | `25323808b741c904636cbc7f00eef702a669952f63e93442a8caab6dc1bd20f5` |
+| `online+data+package.xlsx` | 23.1 KB | `8f6ea6e2195a72391bf7cf4a80ff404aa9a16688877520668a0409e071ee7a1d` |
 
 ## prior_results
 
