@@ -6,6 +6,8 @@
 # 用法（EvoWM 根目录，tmux 里）：GPUS="0 1 2 3" bash scripts/thermal/run_thermal_v1.sh
 # 进度看 outputs/thermal_v1/logs/progress.txt（最后一行 ALLDONE 即完成），报告 outputs/thermal_v1/report.md。
 set -euo pipefail
+# pip 的 torch 自带全部 CUDA 库；系统的 /usr/local/cuda（12.1）若在 LD_LIBRARY_PATH 里会盖掉它们，import torch 即失败（2026-10-28 遇到）。
+unset LD_LIBRARY_PATH
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 DESIGN="docs/design/热阀与落震_反事实闭环_设计_2026-10-28.md"
