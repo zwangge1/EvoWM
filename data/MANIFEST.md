@@ -1,4 +1,4 @@
-# 数据清单（2026-10-21，由 scripts/make_manifest.py 生成）
+# 数据清单（2026-10-27，由 scripts/make_manifest.py 生成）
 
 `data/raw/` 与 `data/prior_results/` 只读。新增数据先在脚本的 SOURCES 里登记来源，再重新生成本文件。
 
@@ -103,6 +103,60 @@
 |---|---|---|
 | `doi_10_5061_dryad_4h1n1__v20180103.zip` | 23.2 KB | `25323808b741c904636cbc7f00eef702a669952f63e93442a8caab6dc1bd20f5` |
 | `online+data+package.xlsx` | 23.1 KB | `8f6ea6e2195a72391bf7cf4a80ff404aa9a16688877520668a0409e071ee7a1d` |
+
+## raw/gbif_ummz_birds
+
+来源：密歇根大学动物博物馆鸟类藏品记录（GBIF 数据集 UMMZ Birds, datasetKey be5507b9-7abf-4b69-afe1-5ca2b7561734，214,319 条），GBIF 简单 CSV 下载 0038147-260928105237408（年份、坐标）与 Darwin Core Archive 下载 0038434-260928105237408（occurrence.txt 230 列，含 sex、lifeStage、preparations、dynamicProperties 野外测量），2026-10-21 下载
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `0038147-260928105237408.zip` | 25.4 MB | `aa6e625de9abab8c3f853ae950e3c4112765b145162120b9b290621e47a7df53` |
+| `0038434-260928105237408.zip` | 87.8 MB | `1e3be0ef7c9615fc8c4edbce5521736d7686b079dbaeba2099c6effdfc421925` |
+
+## raw/gbif_fmnh_birds
+
+来源：菲尔德博物馆鸟类藏品记录（GBIF 数据集 FMNH Birds, datasetKey 36f15a36-6b45-442e-9c31-cd633423aee0，535,114 条），GBIF 简单 CSV 下载 0038148-260928105237408，含 catalogNumber、年份、坐标，不含性别，2026-10-21 下载
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `0038148-260928105237408.zip` | 75.6 MB | `d4bfcd9f83d529cfa8c576c54adbdfe5ddcbfbc6cc8aab75abe45b6c448cff46` |
+
+## raw/worldclim
+
+来源：WorldClim 2.1 生物气候变量，2.5 角分（wc2.1_2.5m_bio.zip，从 worldclim.org 下载，2026-10-21）；解出的 bio_1 年均温、bio_5 最热月最高温、bio_6 最冷月最低温三个 tif 不进 git
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `wc2.1_2.5m_bio.zip` | 658.4 MB | `acdc818765cb362d61c1bd88ee3ae7312e81da54ae2a8d87188bdcbe9b828ace` |
+| `wc2.1_2.5m_bio_1.tif` | 50.2 MB | `e776e42c80de9c2c739aaccf8995c87956ae5e7b38bb104cb050e3109b677daa` |
+| `wc2.1_2.5m_bio_5.tif` | 37.7 MB | `5c301b90e8a83d0a9b57d592a36ee5a07eeb228a20184c78cba6d0419fc4f5fb` |
+| `wc2.1_2.5m_bio_6.tif` | 39.9 MB | `fc737cc086c5c81e2c46e84af63d352d60bb051ea378361d0245eb2f3d674896` |
+
+## raw/devmode
+
+来源：鸟类各科发育方式编码表（P 早成、SP 半早成、SA 半晚成、A 晚成；exposed = P + SP），依 Starck 与 Ricklefs 1998 的框架手工编码，5 个科标 uncertain，2026-10-26
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `devmode_families.csv` | 3.4 KB | `4bca08d8c9ac161f21b1a15373511f09e0e2caba67f9be486f6e015c79ca6d58` |
+
+## raw/cooney2020
+
+来源：鸟类发育时长与巢型等（Cooney 等 2020 Nat Commun 的 Source Data，3,096 种：孵化期、留巢期、发育方式、巢型），2026-10-27 下载
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `41467_2020_16257_MOESM3_ESM.xlsx` | 851.8 KB | `011b6dc7f93cc644088aeb0a39bc28f929950bed7177cebab218332f0dd50ea1` |
+
+## raw/eliason2023
+
+来源：全鸟类六骨长度（Eliason、Proffitt 与 Clarke 2023 Evolution，Dryad doi:10.5061/dryad.f4qrfj70k，CC0；S1_limb_data.csv 由 zip 解出），2026-10-27 下载
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `README.md` | 0.5 KB | `6e9e202610cb4eb28658a2d180d2612bfae05f8fcf3bfa6e3474653e56d97438` |
+| `S1_limb_data.csv` | 329.4 KB | `ab27ad36b57a0eb8bcdf3a22653a9940304c9e4b0d54ad24c742e0ef31b09038` |
+| `doi_10_5061_dryad_f4qrfj70k__v20221123.zip` | 330.2 KB | `c25d932a87d6ce9c5447ed1bd6ea6f6d9df38e2b6b0be19523093cfbc9060388` |
 
 ## prior_results
 

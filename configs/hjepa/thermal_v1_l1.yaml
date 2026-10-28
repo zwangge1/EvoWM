@@ -1,0 +1,13 @@
+# 热阀反事实 v1（设计 docs/design/热阀与落震_反事实闭环_设计_2026-10-28.md 第 4 节）：
+# 动作在"只含习性变化"的基础上加第四个习性组 climate（bio1、bio5、bio6，单位 10 °C，各减物种均值），
+# 表由 scripts/thermal/build_species_table_clim.py 生成。其余与真实数据主分析 v2 的 recovery_v5_l1 完全相同
+# （单层、4,000 步、批量 128、按科 5 折、单卡 fp32）。
+defaults:
+- recovery_v5_l1
+- _self_
+data:
+  dataset:
+    species_table: data/processed/species_traits_clim.csv
+level1:
+  wm:
+    action_dim: 56   # = 习性与气候列数 50 + 习性组数 4 + 2（距离），数据集会打印核对

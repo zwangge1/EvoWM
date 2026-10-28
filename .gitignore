@@ -8,7 +8,10 @@ outputs/*
 data/interim/
 data/processed/*
 !data/processed/.gitkeep
+!data/processed/species_climate.csv
 data/raw/birdtree/*_100.nwk
 data/raw/ponti2025/trees_ex.nex
 
 *.zip
+
+data/raw/worldclim/*.tif

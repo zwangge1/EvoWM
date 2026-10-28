@@ -21,6 +21,12 @@ SOURCES = {
     "raw/fox2026_wingspan": "翼展数据库：1,442 种实测翼展与 10,618 种按目回归预测的翼展（Fox, Brunton & Shephard 2026, bioRxiv doi:10.64898/2026.04.27.720532；figshare doi:10.6084/m9.figshare.32089083，CC BY 4.0），2026-10-21 下载",
     "raw/serrano2017": "83 种现生鸟 188 只的体重、翼展与升力面积（Serrano et al. 2017, Paleobiology 43(1):144, doi:10.1017/pab.2016.24），马拉加大学仓库的作者接受稿 PDF，表在附录，2026-10-21 下载",
     "raw/tanaka2018": "现生鸟翅面积、翼展、体重与足迹（Tanaka 2018, Dryad doi:10.5061/dryad.4h1n1），online data package.xlsx 由 zip 解出，2026-10-21 下载",
+    "raw/gbif_ummz_birds": "密歇根大学动物博物馆鸟类藏品记录（GBIF 数据集 UMMZ Birds, datasetKey be5507b9-7abf-4b69-afe1-5ca2b7561734，214,319 条），GBIF 简单 CSV 下载 0038147-260928105237408（年份、坐标）与 Darwin Core Archive 下载 0038434-260928105237408（occurrence.txt 230 列，含 sex、lifeStage、preparations、dynamicProperties 野外测量），2026-10-21 下载",
+    "raw/gbif_fmnh_birds": "菲尔德博物馆鸟类藏品记录（GBIF 数据集 FMNH Birds, datasetKey 36f15a36-6b45-442e-9c31-cd633423aee0，535,114 条），GBIF 简单 CSV 下载 0038148-260928105237408，含 catalogNumber、年份、坐标，不含性别，2026-10-21 下载",
+    "raw/worldclim": "WorldClim 2.1 生物气候变量，2.5 角分（wc2.1_2.5m_bio.zip，从 worldclim.org 下载，2026-10-21）；解出的 bio_1 年均温、bio_5 最热月最高温、bio_6 最冷月最低温三个 tif 不进 git",
+    "raw/devmode": "鸟类各科发育方式编码表（P 早成、SP 半早成、SA 半晚成、A 晚成；exposed = P + SP），依 Starck 与 Ricklefs 1998 的框架手工编码，5 个科标 uncertain，2026-10-26",
+    "raw/cooney2020": "鸟类发育时长与巢型等（Cooney 等 2020 Nat Commun 的 Source Data，3,096 种：孵化期、留巢期、发育方式、巢型），2026-10-27 下载",
+    "raw/eliason2023": "全鸟类六骨长度（Eliason、Proffitt 与 Clarke 2023 Evolution，Dryad doi:10.5061/dryad.f4qrfj70k，CC0；S1_limb_data.csv 由 zip 解出），2026-10-27 下载",
     "prior_results": "旧仓库生物侧结果。复制自 Desktop\\FFY\\FFY\\outputs\\phylo\\ 与 outputs\\pgls\\",
 }
 
