@@ -1,0 +1,46 @@
+# Experimental auxiliary phylogenetic aggregation; not assumed superior to L1.
+# No temperature, locomotion, development or target morphology defines membership.
+defaults:
+- allen_world_v1_l1
+- _self_
+num_levels: 2
+evowm_units: true
+data:
+  dataset:
+    clade_age: 20.0
+    units:
+      levels: [phylo]
+      history: 3
+      max_members: 16
+level2:
+  lr: 0.0003
+  wm:
+    history_size: 3
+    rollout_n: 1
+    embed_dim: 128
+    use_proprio: false
+    action_dim: 115
+  encoder:
+    type: mlp
+    input_dim: 128
+    hidden_dim: 256
+    output_dim: 128
+    projector:
+      type: identity
+  action_embed:
+    patch_embed: false
+  predictor:
+    depth: 3
+    heads: 4
+    mlp_dim: 512
+    dim_head: 32
+    dropout: 0.1
+    emb_dropout: 0.0
+    hidden_dim: 128
+    projector:
+      type: mlp
+  loss:
+    embed:
+      sigreg:
+        enabled: true
+        weight: 0.09

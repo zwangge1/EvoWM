@@ -1,0 +1,23 @@
+# Allen v1: one shared JEPA, four condition-availability patterns.
+# Development and mass are conditions, not hierarchy definitions.
+defaults:
+- recovery_v5_l1
+- _self_
+output_model_name: allen_world_v1
+evowm_residual: true
+evowm_seed_before_model: true
+data:
+  dataset:
+    type: evowm_allen
+    species_table: outputs/allen_world_v1/input/species_traits.csv
+    tree_file: data/processed/trees/hackett_t021.nwk
+    n_trees: 1
+    eco_dropout: 0.0
+    condition_mask_probs: [0.25, 0.25, 0.25, 0.25]
+    require_cols: [m_tarsus, m_mass, e_dev_A, bio1_c, bio5_c, bio6_c]
+num_workers: 8
+level1:
+  wm:
+    action_dim: 115  # 5*(3 temperature + 12 motion + 7 background) + 3 offered flags + 2 distances
+  encoder:
+    input_dim: 8    # external tarsus + 3 Eliason bones; four values and four observed masks

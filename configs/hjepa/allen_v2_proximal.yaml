@@ -1,0 +1,5 @@
+defaults:
+- allen_v2_flat
+- _self_
+evowm_allen_readout:
+  variant: proximal

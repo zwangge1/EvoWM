@@ -17,6 +17,9 @@
 
 | 日期 | 文件 | 改动 | 原因 |
 |---|---|---|---|
+| 2026-11-04 | h_jepa/main_hjepa.py | `evowm_allen_readout` 显式打开时调用 Allen 解剖输出适配器，在训练集上设置读出归一化统计 | 比较等参数量的平行、总量→分配、近端→远端及反向输出组织；复用原 JEPA/SIGReg，额外监督损失明确登记，不称原生时间层级 |
+| 2026-11-04 | h_jepa/main_hjepa.py | 仅配置 `evowm_seed_before_model: true` 时，在建数据和模型前调用 `pl.seed_everything` | Allen 配对层级比较需控制初始化种子；原入口只在较晚的 Manager 处传 seed。旧配置行为不变 |
+| 2026-11-04 | h_jepa/data.py | 增加显式 `evowm_allen` 分支，返回 `evowm.data.allen.AllenDataset` | Allen 专用条件与分组遮蔽；旧数据、模型、训练分支不变。仍复用原 JEPA、SIGReg、残差扩展和单位层训练。设计见 `../docs/design/Allen世界模型_v1_实现与运行.md` |
 | 2026-10-13 | h_jepa/data.py | `build_hdf5_dataset` 增加 `type: evowm_transect` 分支，返回 `evowm.data.transect.TreeTransectDataset`；原 droid 分支改为先取出 type 再判断，行为不变 | 接入系统发育样带数据，写法仿上游的 DROID 分支 |
 | 2026-10-15 | h_jepa/main_hjepa.py | 配置有 `evowm_units: true` 时改用 `evowm.models.units` 的 `create_world_model` 与 `units_forward`；`_hjepa_training_forward` 增加可选参数 `forward_fn`（默认仍为 `hjepa_forward`）。其他配置行为不变 | 按习性尺度分层（设计草案 `docs/design/第二层设计草案_2026-10-15.md`）：上层单位按习性事件分段、长度可变，上游按固定步长分块的 `encode_hierarchical` 用不了。各层仍是上游的 JEPA 对象，第 1 层的损失与上游逐位相同 |
 | 2026-10-19 | h_jepa/models/jepa.py | `JEPA.predict`：对象上 `residual_predict` 为真时，在预测器输出上加输入的表示（预测变化量）；没有这个属性时行为不变 | 读数诊断 v1 显示预测器在习性没变时仍给出变化，上层预测不如照抄（设计 `docs/design/预测变化量_重训_2026-10-19.md`） |

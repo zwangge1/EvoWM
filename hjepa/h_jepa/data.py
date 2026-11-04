@@ -48,6 +48,10 @@ def build_hdf5_dataset(dataset_cfg, cache_dir=None):
         from evowm.data.transect import TreeTransectDataset
 
         return TreeTransectDataset(**cfg)
+    if dataset_type == "evowm_allen":  # Opt-in Allen conditions; legacy datasets are unchanged.
+        from evowm.data.allen import AllenDataset
+
+        return AllenDataset(**cfg)
     subset_seed = int(cfg.pop("subset_seed", 0))
     total_transitions = cfg.pop("total_transitions", None)
     dataset = swm.data.HDF5Dataset(**cfg, cache_dir=cache_dir)

@@ -150,6 +150,9 @@ def _hjepa_training_forward(self, batch, stage, cfg, forward_fn=None):
 
 @hydra.main(version_base=None, config_path="config/train", config_name=None)
 def run(cfg):
+    if cfg.get("evowm_seed_before_model", False):
+        # Opt-in: seed model initialization too, before Manager's later training seed.
+        pl.seed_everything(int(cfg.seed), workers=True)
     #########################
     ##       dataset       ##
     #########################
@@ -199,9 +202,16 @@ def run(cfg):
 
     normalizer_artifact = build_normalizer_artifact(cfg, train_dataset)
     create_fn, forward_fn = create_world_model, None
+    if cfg.get("evowm_allen_readout", False):
+        if cfg.get("evowm_units", False):
+            raise ValueError("Allen anatomical readouts cannot be combined with legacy unit hierarchies")
+        from evowm.models.allen_readout import create_world_model as create_fn, allen_forward as forward_fn
     if cfg.get("evowm_units", False):  # EvoWM: habit-event upper levels (../../src/evowm/models/units.py)
         from evowm.models.units import create_world_model as create_fn, units_forward as forward_fn
     world_model, losses = create_fn(cfg)
+    if cfg.get("evowm_allen_readout", False):
+        from evowm.models.allen_readout import configure_readout
+        configure_readout(world_model, train_dataset)
     if cfg.get("evowm_residual", False):  # EvoWM: predict the change (../../src/evowm/models/residual.py)
         from evowm.models.residual import enable_residual
         logging.info(f"evowm_residual: predictor predicts the change at levels {enable_residual(world_model)}")
