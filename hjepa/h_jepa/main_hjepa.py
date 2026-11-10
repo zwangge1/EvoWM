@@ -202,6 +202,10 @@ def run(cfg):
 
     normalizer_artifact = build_normalizer_artifact(cfg, train_dataset)
     create_fn, forward_fn = create_world_model, None
+    if cfg.get("evowm_allen_anatomical", False):
+        if cfg.get("evowm_units", False) or cfg.get("evowm_allen_readout", False):
+            raise ValueError("Allen anatomical JEPA cannot combine legacy units/readout adapters")
+        from evowm.models.allen_anatomical import create_world_model as create_fn, anatomical_forward as forward_fn
     if cfg.get("evowm_allen_readout", False):
         if cfg.get("evowm_units", False):
             raise ValueError("Allen anatomical readouts cannot be combined with legacy unit hierarchies")
@@ -209,6 +213,9 @@ def run(cfg):
     if cfg.get("evowm_units", False):  # EvoWM: habit-event upper levels (../../src/evowm/models/units.py)
         from evowm.models.units import create_world_model as create_fn, units_forward as forward_fn
     world_model, losses = create_fn(cfg)
+    if cfg.get("evowm_allen_anatomical", False):
+        from evowm.models.allen_anatomical import configure_readout
+        configure_readout(world_model, train_dataset)
     if cfg.get("evowm_allen_readout", False):
         from evowm.models.allen_readout import configure_readout
         configure_readout(world_model, train_dataset)

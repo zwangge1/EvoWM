@@ -28,7 +28,7 @@ HIDDEN_GROUPS = {
 
 
 class AllenDataset(TreeTransectDataset):
-    def __init__(self, *args, condition_mask_probs=None,
+    def __init__(self, *args, condition_mask_probs=None, anatomical_targets=False,
                  clade_age=20.0, units=None, **kwargs):
         if kwargs.get("eco_dropout", 0) != 0:
             raise ValueError("Allen uses explicit group masks; eco_dropout must be zero")
@@ -40,6 +40,7 @@ class AllenDataset(TreeTransectDataset):
             raise ValueError("units.history must be positive")
         self.clade_age = float(clade_age)
         self.clade_codes = None
+        self.anatomical_targets = bool(anatomical_targets)
         super().__init__(*args, units=None, **kwargs)
         root = Path(kwargs.get("evowm_root") or __import__("os").environ.get("EVOWM_ROOT", "."))
         table_path = root / kwargs["species_table"]
@@ -73,6 +74,17 @@ class AllenDataset(TreeTransectDataset):
                 raise ValueError("Recomputed family split differs from the frozen input fold assignment")
         train = eligible & ~self.table[dict(kwargs.get("holdout") or {}).get("level", "family")].isin(self.heldout_groups).to_numpy()
         self.training_rows = train
+        if self.anatomical_targets:
+            if tuple(self.state_cols) != ("m_tarsus", "b_fem", "b_tbt", "b_tmt"):
+                raise ValueError("Anatomical targets require canonical Allen state ordering")
+            bones = self.S[:, 1:].astype(np.float64)
+            complete = np.isfinite(bones).all(axis=1)
+            self.complete_three_bones = complete
+            self.anatomical_log_total = np.full(len(bones), np.nan, np.float32)
+            self.anatomical_log_ratios = np.full((len(bones), 2), np.nan, np.float32)
+            self.anatomical_log_total[complete] = (
+                np.logaddexp.reduce(bones[complete] * np.log(10.), axis=1) / np.log(10.))
+            self.anatomical_log_ratios[complete] = bones[complete, :2] - bones[complete, 2:]
         raw = self.table[self.eco_cols].to_numpy(float)
         if not np.isfinite(raw[train]).any(axis=0).all():
             raise ValueError("A condition column has no training observations")
@@ -170,6 +182,10 @@ class AllenDataset(TreeTransectDataset):
         if self.transform:
             steps = self.transform({k.removesuffix("_level1"): v for k, v in out.items()})
             out = {f"{k}_level1": v for k, v in steps.items()}
+        if self.anatomical_targets:
+            out.update(anatomical_log_total=torch.from_numpy(self.anatomical_log_total[rows].copy()),
+                       anatomical_log_ratios=torch.from_numpy(self.anatomical_log_ratios[rows].copy()),
+                       complete_three_bones=torch.from_numpy(self.complete_three_bones[rows].copy()))
         if self.units:
             starts, ends, ud = self.pool[j][2]
             T, M = self.units["history"] + 1, self.units["max_members"]
@@ -206,4 +222,6 @@ class AllenDataset(TreeTransectDataset):
                 "mask_modes": self.mask_modes, "condition_mask_probs": self.condition_mask_probs.tolist(),
                 "condition_mu": self.condition_mu.tolist(), "condition_sd": self.condition_sd.tolist(),
                 "action_layout": self.action_layout, "action_dim": self.action_dim,
+                "anatomical_targets": self.anatomical_targets,
+                "n_complete_three_bones": int(self.complete_three_bones[self.rows_mask].sum()) if self.anatomical_targets else None,
                 "pixel_dim": self.pixel_dim, "clade_age": self.clade_age if self.units else None}

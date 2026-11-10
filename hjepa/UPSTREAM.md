@@ -17,6 +17,7 @@
 
 | 日期 | 文件 | 改动 | 原因 |
 |---|---|---|---|
+| 2026-11-10 | h_jepa/main_hjepa.py | `evowm_allen_anatomical` 显式打开时调用独立的两层解剖尺度适配器，并在建优化器前用训练折配置读出；禁止与旧 units/readout 同开 | 同一目标物种的整体与骨段预测，复用原 JEPA 组件；新模型在适配器内统一把 BatchNorm 换成逐样本 LayerNorm，保证窗口预测的前缀隔离。旧配置不变。见 `../docs/design/Allen两层解剖尺度预测_v3_实现与运行_2026-11-10.md` |
 | 2026-11-04 | h_jepa/main_hjepa.py | `evowm_allen_readout` 显式打开时调用 Allen 解剖输出适配器，在训练集上设置读出归一化统计 | 比较等参数量的平行、总量→分配、近端→远端及反向输出组织；复用原 JEPA/SIGReg，额外监督损失明确登记，不称原生时间层级 |
 | 2026-11-04 | h_jepa/main_hjepa.py | 仅配置 `evowm_seed_before_model: true` 时，在建数据和模型前调用 `pl.seed_everything` | Allen 配对层级比较需控制初始化种子；原入口只在较晚的 Manager 处传 seed。旧配置行为不变 |
 | 2026-11-04 | h_jepa/data.py | 增加显式 `evowm_allen` 分支，返回 `evowm.data.allen.AllenDataset` | Allen 专用条件与分组遮蔽；旧数据、模型、训练分支不变。仍复用原 JEPA、SIGReg、残差扩展和单位层训练。设计见 `../docs/design/Allen世界模型_v1_实现与运行.md` |

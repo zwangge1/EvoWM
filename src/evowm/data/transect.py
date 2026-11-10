@@ -89,6 +89,50 @@ def family_folds(table: pd.DataFrame, eligible: np.ndarray, n_folds: int, seed: 
     return fold_of
 
 
+def validated_frozen_folds(table, eligible, holdout, column, metadata):
+    """Use a recorded split, independent of pandas' ordering of tied families.
+
+    Opt-in only: historical configurations retain their original split rule.
+    Both the column and metadata mapping must agree, including ineligible
+    members of a family represented in the eligible sample.
+    """
+    level = holdout.get("level", "family")
+    count, fold = int(holdout.get("folds", 0)), int(holdout.get("fold", 0))
+    if count < 2 or not 0 <= fold < count or holdout.get("frac", 0):
+        raise ValueError("Frozen folds require a valid K-fold holdout and frac=0")
+    if column not in table or level not in table:
+        raise ValueError("Frozen fold column or grouping column is missing")
+    declaration = metadata.get("frozen_split", {})
+    if (declaration.get("level") != level or declaration.get("folds") != count
+            or declaration.get("seed") != int(holdout.get("seed", 0))):
+        raise ValueError("Frozen split metadata disagrees with holdout settings")
+    if declaration.get("audit_column", column) != column:
+        raise ValueError("Frozen split audit column does not match metadata")
+    if declaration.get("require_cols"):
+        recorded_eligible = table[declaration["require_cols"]].notna().all(axis=1).to_numpy()
+        if not np.array_equal(recorded_eligible, eligible):
+            raise ValueError("Eligibility differs from the frozen split definition")
+    mapping = declaration.get("family_to_fold")
+    if not isinstance(mapping, dict) or not mapping:
+        raise ValueError("Frozen split metadata must contain family_to_fold")
+    if table.loc[eligible, level].isna().any():
+        raise ValueError("Eligible species must have a frozen group label")
+    groups = set(table.loc[eligible, level])
+    if not groups <= set(mapping):
+        raise ValueError("Eligible groups are absent from frozen metadata")
+    for group, value in mapping.items():
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or not 0 <= value < count:
+            raise ValueError("Invalid fold ID in frozen metadata")
+    selected = table[level].isin(groups)
+    observed = pd.to_numeric(table.loc[selected, column], errors="coerce").to_numpy(float)
+    expected = table.loc[selected, level].map(mapping).to_numpy(float)
+    if not np.isfinite(observed).all() or not np.array_equal(observed, expected):
+        raise ValueError("Frozen fold column disagrees with metadata or splits a group")
+    if set(mapping[g] for g in groups) != set(range(count)):
+        raise ValueError("Every frozen fold must contain eligible groups")
+    return {group: mapping[group] for group in groups}
+
+
 class TreeTransectDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -103,6 +147,7 @@ class TreeTransectDataset(torch.utils.data.Dataset):
         state_cols: list[str] | None = None,
         require_cols: tuple[str, ...] = ("m_tarsus", "m_mass"),
         holdout: dict | None = None,
+        frozen_fold_column: str | None = None,
         n_orders: int = 64,
         refresh_every: int = 256,
         samples_per_epoch: int | None = None,
@@ -135,7 +180,10 @@ class TreeTransectDataset(torch.utils.data.Dataset):
         # ---- 可用物种与留出 ----
         eligible = table[list(require_cols)].notna().all(axis=1).to_numpy()
         holdout = dict(holdout or {})
-        if holdout.get("folds"):  # 按科 K 折交叉验证：留出第 fold 份
+        if frozen_fold_column is not None:
+            fold_of = validated_frozen_folds(table, eligible, holdout, frozen_fold_column, meta)
+            held = {g for g, k in fold_of.items() if k == int(holdout.get("fold", 0))}
+        elif holdout.get("folds"):  # 按科 K 折交叉验证：留出第 fold 份
             fold_of = family_folds(table, eligible, int(holdout["folds"]), int(holdout.get("seed", 0)),
                                    holdout.get("level", "family"))
             held = {g for g, k in fold_of.items() if k == int(holdout.get("fold", 0))}

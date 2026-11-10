@@ -25,6 +25,8 @@ sys.path.insert(0, str(ROOT / "src"))
 MODES = ("full", "no_temperature", "no_motion", "neither")
 TEMPERATURE_AXES = ("joint", "bio1_c", "bio5_c", "bio6_c")
 BONES = ("b_fem", "b_tbt", "b_tmt")
+ANATOMICAL_OUTCOMES = ("log10_total_leg", "log10_fem_over_tmt", "log10_tbt_over_tmt",
+                      "log10_proportion_b_fem", "log10_proportion_b_tbt", "log10_proportion_b_tmt")
 
 
 def sha(path):
@@ -116,6 +118,82 @@ def with_ratio(values, columns):
     return np.column_stack([values, values[:, j_t] - values[:, j_f]])
 
 
+def anatomical_coordinates(values, columns):
+    """Derive global size and allocation from the same three measured bones.
+
+    Partial triplets give no total/proportion labels. The two independent
+    allocation coordinates use tarsometatarsus as their common denominator.
+    """
+    bones = np.asarray(values, dtype=float)[:, [columns.index(b) for b in BONES]]
+    complete = np.isfinite(bones).all(axis=1)
+    safe = np.where(complete[:, None], bones, 0.)
+    total = np.logaddexp.reduce(safe * np.log(10.), axis=1) / np.log(10.)
+    result = {"log10_total_leg": total,
+              "log10_fem_over_tmt": safe[:, 0] - safe[:, 2],
+              "log10_tbt_over_tmt": safe[:, 1] - safe[:, 2]}
+    result.update({f"log10_proportion_{bone}": safe[:, j] - total for j, bone in enumerate(BONES)})
+    return {name: np.where(complete, value, np.nan) for name, value in result.items()}
+
+
+def outcome_values(values, columns, outcomes):
+    """Use one coordinate transform for observations and every comparator."""
+    values = np.asarray(values)
+    basic = dict(zip(columns + ["log10_tmt_over_fem"], with_ratio(values, columns).T))
+    if any(name in ANATOMICAL_OUTCOMES for name in outcomes):
+        basic.update(anatomical_coordinates(values, columns))
+    return np.column_stack([basic[name] for name in outcomes])
+
+
+class AnatomicalPredictor:
+    """NumPy batching bridge to the exact train-time hierarchical inference API.
+
+    Unlike Level1, this receives raw reference pixels, never target morphology
+    or precomputed target encodings. Its output is already in log10 mm.
+    """
+    def __init__(self, model):
+        self.model = model.eval()
+
+    def predict(self, context, actions, batch=512):
+        import torch
+        from evowm.models.allen_anatomical import predict_from_context
+        context, actions = np.asarray(context), np.asarray(actions)
+        if (batch < 1 or context.ndim != 3 or actions.ndim != 3
+                or context.shape[:2] != actions.shape[:2] or not len(context)):
+            raise ValueError("Expected nonempty matching (N,H,D) reference context and actions")
+        if not np.isfinite(context).all() or not np.isfinite(actions).all():
+            raise ValueError("Reference pixels/actions must be finite, with missingness encoded by masks")
+        device = next(self.model.parameters(), torch.empty(0)).device
+        chunks = []
+        with torch.no_grad():
+            for start in range(0, len(context), batch):
+                pixels = torch.as_tensor(context[start:start + batch], dtype=torch.float32, device=device)
+                conditions = torch.as_tensor(actions[start:start + batch], dtype=torch.float32, device=device)
+                prediction = predict_from_context(self.model, pixels, conditions)["predicted_log_lengths"]
+                if prediction.shape != (*pixels.shape[:2], 4) or not torch.isfinite(prediction).all():
+                    raise ValueError("Hierarchical inference returned invalid log lengths")
+                chunks.append(prediction.detach().cpu().numpy())
+        return np.concatenate(chunks)
+
+
+def prediction_backend(model, pixels, state, train_rows, columns, batch=512):
+    """Select a complete inference path; never fit a new probe for v3 models."""
+    settings = getattr(model, "allen_anatomical_settings", None)
+    if settings is not None:
+        if columns != ["m_tarsus", "b_fem", "b_tbt", "b_tmt"]:
+            raise ValueError("Hierarchical readout requires canonical target ordering")
+        settings = dict(settings)
+        info = {"kind": "trained_anatomical_hierarchy", "levels": int(model.num_levels),
+                "mode": settings.get("mode"), "connection": settings.get("connection"),
+                "objective": settings.get("objective"), "settings": settings,
+                "detail": "Saved anatomical model evaluated through predict_from_context, identical to training inference; only reference morphology supplied; no probe fit."}
+        return AnatomicalPredictor(model), np.asarray(pixels), lambda prediction: prediction, info
+    from evowm.eval.recovery import Level1
+    predictor = Level1(model)
+    embeddings = predictor.encode(pixels)
+    decode, info = prediction_decoder(model, embeddings, state, train_rows, columns, batch=batch)
+    return predictor, embeddings, decode, info
+
+
 def prediction_decoder(model, embeddings, state, train_rows, columns, batch=512):
     """Select a trained anatomical readout or fit a train-only legacy probe.
 
@@ -175,6 +253,19 @@ def family_metric(errors, target_rows, table):
             "family_weighted_mean_error": float(per_family.error.mean())}
 
 
+def allocation_metric(errors, target_rows, table):
+    """Joint RMSE of two log-ratio coordinates, with no fictitious signed bias."""
+    errors = np.asarray(errors, dtype=float)
+    if errors.ndim != 2 or errors.shape[1] != 2:
+        raise ValueError("Joint allocation errors must contain exactly two coordinates")
+    finite = np.isfinite(errors).all(axis=1)
+    distance = np.sqrt(np.mean(np.where(finite[:, None], errors, 0.) ** 2, axis=1))
+    result = family_metric(np.where(finite, distance, np.nan), target_rows, table)
+    result["family_weighted_mean_error"] = None
+    result["coordinate_weighting"] = "Mean squared error across fem/tmt and tbt/tmt log10 coordinates before species/family aggregation; no signed multivariate bias defined."
+    return result
+
+
 def response_metric(values, rows, table):
     ok = np.isfinite(values)
     if not ok.any():
@@ -204,7 +295,7 @@ def temperature_diagnostic(ds_tr, ds_va, l1, decode, context_emb, windows, obser
     cols = list(ds_tr.state_cols)
     for signed_step in (-step, step):
         actions = action_windows(ds_va, windows, history, temperature_delta=signed_step, temperature_axis=axis)
-        perturbed.append(with_ratio(decode(l1.predict(context_emb, actions, batch=batch))[:, -1], cols))
+        perturbed.append(outcome_values(decode(l1.predict(context_emb, actions, batch=batch))[:, -1], cols, outcomes))
     slopes = (perturbed[1] - perturbed[0]) * (10. / (2 * step))
     slopes[~support] = np.nan
     bone_indices = [outcomes.index(b) for b in BONES]
@@ -311,7 +402,7 @@ def observational_gradient(observed, predicted, rows, table, columns):
 def evaluate(ds_tr, ds_va, model, cfg, out, *, n_orders=2, seed=0, batch=512, temperature_step=1.,
              temperature_axis="joint", all_temperature_axes=False):
     from sklearn.linear_model import Ridge
-    from evowm.eval.recovery import Level1, sample_windows
+    from evowm.eval.recovery import sample_windows
     out.mkdir(parents=True, exist_ok=True)
     history = int(cfg["level1"]["wm"]["history_size"])
     if int(cfg["level1"]["wm"]["rollout_n"]) != 1:
@@ -323,11 +414,9 @@ def evaluate(ds_tr, ds_va, model, cfg, out, *, n_orders=2, seed=0, batch=512, te
     tr_rows = np.flatnonzero(ds_tr.rows_mask)
     if min(np.isfinite(state[tr_rows]).sum(axis=0)) < 2:
         raise ValueError("At least two training observations are required for each outcome probe")
-    l1 = Level1(model)
-    # Encoding all rows does not expose targets to prediction: only rows[:, :H]
-    # are selected below. Probe fitting is explicitly restricted to train rows.
-    all_emb = l1.encode(ds_tr.pix)
-    decode, readout_info = prediction_decoder(model, all_emb, state, tr_rows, cols, batch=batch)
+    # v3 uses reference pixels directly; legacy paths encode rows before selecting
+    # the reference window. No branch supplies target morphology to inference.
+    l1, all_emb, decode, readout_info = prediction_backend(model, ds_tr.pix, state, tr_rows, cols, batch=batch)
     wt = sample_windows(ds_tr, n_orders, history + 1, seed)
     wv = sample_windows(ds_va, n_orders, history + 1, seed + 1)
     target = wv.rows[:, -1]
@@ -357,9 +446,12 @@ def evaluate(ds_tr, ds_va, model, cfg, out, *, n_orders=2, seed=0, batch=512, te
         xv = np.concatenate([x_context_va, acts_va[m].reshape(len(wv.rows), -1)], axis=1)
         predictions[f"ridge_{m}"] = np.column_stack([reg.predict(xv) for reg in linear])
     predictions["copy_previous"] = state[source]
-    predictions = {name: with_ratio(pred, cols) for name, pred in predictions.items()}
-    observed = with_ratio(state[target], cols)
     outcomes = cols + ["log10_tmt_over_fem"]
+    hierarchical = getattr(model, "allen_anatomical_settings", None) is not None
+    if hierarchical:
+        outcomes += list(ANATOMICAL_OUTCOMES)
+    predictions = {name: outcome_values(pred, cols, outcomes) for name, pred in predictions.items()}
+    observed = outcome_values(state[target], cols, outcomes)
     table = ds_va.table
     raw = pd.DataFrame({"window": np.arange(len(target)), "target_row": target, "source_row": source,
                         "target_tip": table.tip.to_numpy()[target], "source_tip": table.tip.to_numpy()[source],
@@ -371,6 +463,10 @@ def evaluate(ds_tr, ds_va, model, cfg, out, *, n_orders=2, seed=0, batch=512, te
             raw[f"target_{col}"] = table[col].to_numpy()[target]
     groups = biological_groups(table, target)
     metrics = {"available": {}, "common_support_all_methods": {}, "by_subgroup_available": {g: {} for g in groups}}
+    complete_bones = np.isfinite(state[target][:, [cols.index(b) for b in BONES]]).all(axis=1)
+    if hierarchical:
+        metrics["complete_three_bones"] = {}
+        raw["complete_three_bones"] = complete_bones
     for j, c in enumerate(outcomes):
         raw[f"observed_{c}"] = observed[:, j]
         raw[f"observed_mask_{c}"] = np.isfinite(observed[:, j])
@@ -380,12 +476,17 @@ def evaluate(ds_tr, ds_va, model, cfg, out, *, n_orders=2, seed=0, batch=512, te
             errors = pred[:, j] - observed[:, j]
             metrics["available"].setdefault(c, {})[name] = family_metric(errors, target, table)
             metrics["common_support_all_methods"].setdefault(c, {})[name] = family_metric(np.where(common, errors, np.nan), target, table)
+            if hierarchical:
+                metrics["complete_three_bones"].setdefault(c, {})[name] = family_metric(
+                    np.where(complete_bones, errors, np.nan), target, table)
             for group, selected in groups.items():
                 metrics["by_subgroup_available"][group].setdefault(c, {})[name] = family_metric(
                     np.where(selected, errors, np.nan), target, table)
     raw.to_csv(out / "prediction_windows.csv.gz", index=False, compression="gzip")
     result = {
-        "scope": "Single-checkpoint pilot diagnostics, not calibrated evolutionary or causal evidence. L1 scored even when checkpoint has an auxiliary L2.",
+        "scope": ("Single-checkpoint pilot diagnostics, not calibrated evolutionary or causal evidence. "
+                  + ("Full anatomical inference path scored, including the configured upper-to-lower connection."
+                     if hierarchical else "L1 scored even when checkpoint has an auxiliary legacy L2.")),
         "history": history, "scored_step": "final target only", "n_orders": n_orders, "seed": seed,
         "n_windows": len(wv.rows), "n_distinct_target_species": len(set(target)),
         "n_target_families": int(table.iloc[target].family.nunique()),
@@ -396,6 +497,27 @@ def evaluate(ds_tr, ds_va, model, cfg, out, *, n_orders=2, seed=0, batch=512, te
         "metrics": metrics, "train_audit": ds_tr.audit(), "val_audit": ds_va.audit(),
         "observational_gradient": observational_gradient(observed, predictions["jepa_full"], target, table, outcomes),
     }
+    if hierarchical:
+        idx = [outcomes.index(c) for c in ("log10_fem_over_tmt", "log10_tbt_over_tmt")]
+        common = complete_bones & np.logical_and.reduce([
+            np.isfinite(pred[:, idx]).all(axis=1) for pred in predictions.values()])
+        for name, pred in predictions.items():
+            error = pred[:, idx] - observed[:, idx]
+            for support, selected in (("available", complete_bones), ("complete_three_bones", complete_bones),
+                                      ("common_support_all_methods", common)):
+                metrics[support].setdefault("allocation_logratio_joint", {})[name] = allocation_metric(
+                    np.where(selected[:, None], error, np.nan), target, table)
+            for group, selected in groups.items():
+                metrics["by_subgroup_available"][group].setdefault("allocation_logratio_joint", {})[name] = allocation_metric(
+                    np.where((selected & complete_bones)[:, None], error, np.nan), target, table)
+        result["anatomical_evaluation"] = {
+            "coordinate_units": "log10 mm for lengths/total, log10 for proportions and ratios",
+            "independent_allocation_coordinates": ["log10_fem_over_tmt", "log10_tbt_over_tmt"],
+            "joint_allocation_metric": "allocation_logratio_joint: equal coordinate MSE, then existing species/family weighting; derived from the saved paired coordinate errors",
+            "primary_bone_support": "complete_three_bones; external tarsus also reported on available observations",
+            "derived_outcomes": list(ANATOMICAL_OUTCOMES),
+            "derived_baseline_rule": "Totals and allocation coordinates are derived from each method's paired bone predictions, not fitted separately. Partial observed/copy triplets do not supply derived labels.",
+        }
     if temperature_axis not in TEMPERATURE_AXES:
         raise ValueError(f"Unknown temperature axis: {temperature_axis}")
     if temperature_step > 0:

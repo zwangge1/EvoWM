@@ -1,0 +1,5 @@
+defaults:
+- allen_v3_full
+- _self_
+evowm_allen_anatomical:
+  connection: scalar

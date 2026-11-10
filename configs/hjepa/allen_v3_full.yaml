@@ -1,0 +1,54 @@
+# Two anatomical scales for the same target species, not temporal H-JEPA.
+defaults:
+- allen_v2_flat
+- _self_
+output_model_name: allen_v3
+num_levels: 2
+evowm_allen_readout: null
+evowm_allen_anatomical:
+  mode: hierarchical
+  connection: full
+  objective: jepa
+  hidden_dim: 64
+  observation_weight: 1.0
+  total_weight: 0.25
+  ratio_weight: 0.25
+data:
+  dataset:
+    frozen_fold_column: allen_frozen_family_fold
+    anatomical_targets: true
+level2:
+  lr: 3.0e-04
+  stride: 1
+  window_size: 1
+  wm:
+    history_size: 3
+    rollout_n: 1
+    embed_dim: 16
+    use_proprio: false
+    action_dim: 117
+  encoder:
+    type: mlp
+    input_dim: 128
+    hidden_dim: 64
+    output_dim: 16
+    projector:
+      type: identity
+  action_embed:
+    input_dim: 117
+    patch_embed: false
+  predictor:
+    depth: 1
+    heads: 2
+    mlp_dim: 64
+    dim_head: 8
+    dropout: 0.1
+    emb_dropout: 0.0
+    hidden_dim: 16
+    projector:
+      type: mlp
+  loss:
+    embed:
+      sigreg:
+        enabled: true
+        weight: 0.09

@@ -1,0 +1,12 @@
+defaults:
+- allen_v3_full
+- _self_
+num_levels: 1
+# Match the full model's trainable capacity (1,713,916 vs 1,714,052).
+# Width increases in the three active predictor feed-forward blocks only.
+level1:
+  predictor:
+    mlp_dim: 616
+evowm_allen_anatomical:
+  mode: single
+  connection: none
